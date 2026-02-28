@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { FlightData, AircraftMeta } from "@/types/flights";
+import type { FlightData, AircraftMeta, RouteInfo } from "@/types/flights";
 
 interface FlightDetailProps {
   flight: FlightData;
@@ -33,6 +33,8 @@ const CATEGORY_LABELS: Record<number, string> = {
 export default function FlightDetail({ flight, onClose, animate }: FlightDetailProps) {
   const [meta, setMeta] = useState<AircraftMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
+  const [route, setRoute] = useState<RouteInfo | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +55,31 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
       active = false;
     };
   }, [flight.id]);
+
+  useEffect(() => {
+    if (!flight.cs) {
+      setRoute(null);
+      return;
+    }
+
+    let active = true;
+    setRoute(null);
+    setRouteLoading(true);
+
+    fetch(`/api/routes?callsign=${encodeURIComponent(flight.cs)}&lat=${flight.lat}&lng=${flight.lng}`)
+      .then((r) => r.json())
+      .then((data: RouteInfo) => {
+        if (active) setRoute(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setRouteLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [flight.cs, flight.lat, flight.lng]);
 
   const phase =
     flight.vr > 2 ? "Climbing" : flight.vr < -2 ? "Descending" : "Cruising";
@@ -134,6 +161,9 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
         {/* Gradient separator */}
         <div className="mt-3 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
       </div>
+
+      {/* Route Banner */}
+      <RouteBar route={route} loading={routeLoading} />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto flight-scrollbar px-4 pb-4 space-y-5">
@@ -303,6 +333,79 @@ function Row({
     <div className="flex justify-between items-start gap-2 py-0.5 rounded hover:bg-white/[0.02] transition-colors -mx-1 px-1">
       <span className="text-white/30 shrink-0">{label}</span>
       <span className={`${valColor} text-right`}>{value}</span>
+    </div>
+  );
+}
+
+/* ─── Route Bar ──────────────────────────────────── */
+
+function RouteBar({ route, loading }: { route: RouteInfo | null; loading: boolean }) {
+  const dep = route?.departure;
+  const dest = route?.destination;
+  const hasRoute = dep || dest;
+  const stops = route?.stops;
+
+  return (
+    <div className="px-4 pb-3">
+      <div className="flex items-center justify-between gap-2 py-2">
+        {/* Departure */}
+        <div className="flex-1 text-center min-w-0">
+          {loading ? (
+            <div className="text-[10px] text-white/20">...</div>
+          ) : hasRoute && dep ? (
+            <>
+              <div className="text-sm font-bold text-white/90 tracking-wide">
+                {dep.iata || dep.icao || "--"}
+              </div>
+              <div className="text-[10px] text-white/35 truncate">
+                {dep.location || dep.name || "--"}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-bold text-white/30">--</div>
+              <div className="text-[10px] text-white/20">Origin</div>
+            </>
+          )}
+        </div>
+
+        {/* Arrow with optional stops */}
+        <div className="flex items-center gap-1 shrink-0 px-1">
+          <div className="w-4 h-[1px] bg-white/15" />
+          {stops && stops.length > 0 && stops.map((s, i) => (
+            <div key={i} className="flex items-center gap-1" title={`${s.iata || s.icao} — ${s.location || s.name}`}>
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
+              <div className="w-2 h-[1px] bg-white/15" />
+            </div>
+          ))}
+          <svg className="w-4 h-4 text-cyan-400/60" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+          </svg>
+          <div className="w-4 h-[1px] bg-white/15" />
+        </div>
+
+        {/* Destination */}
+        <div className="flex-1 text-center min-w-0">
+          {loading ? (
+            <div className="text-[10px] text-white/20">...</div>
+          ) : hasRoute && dest ? (
+            <>
+              <div className="text-sm font-bold text-white/90 tracking-wide">
+                {dest.iata || dest.icao || "--"}
+              </div>
+              <div className="text-[10px] text-white/35 truncate">
+                {dest.location || dest.name || "--"}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-bold text-white/30">--</div>
+              <div className="text-[10px] text-white/20">Dest</div>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="h-[1px] bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
     </div>
   );
 }

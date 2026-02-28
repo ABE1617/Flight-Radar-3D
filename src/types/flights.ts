@@ -23,6 +23,21 @@ export interface FlightsResponse {
   error: boolean;
 }
 
+export interface RouteAirport {
+  iata: string;
+  icao: string;
+  name: string;
+  location: string;   // city/region
+  lat: number;
+  lon: number;
+}
+
+export interface RouteInfo {
+  departure: RouteAirport | null;
+  destination: RouteAirport | null;
+  stops?: RouteAirport[];
+}
+
 export interface AircraftMeta {
   registration: string;
   manufacturerName: string;
