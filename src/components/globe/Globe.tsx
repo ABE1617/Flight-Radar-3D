@@ -4,10 +4,10 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { GlobeEngine } from "./GlobeEngine";
 import FlightPanel from "@/components/FlightPanel";
 import FlightDetail from "@/components/FlightDetail";
+import MobileTopBar from "@/components/MobileTopBar";
+import MobileFlightDrawer from "@/components/MobileFlightDrawer";
 import LoadingScreen from "@/components/LoadingScreen";
-import type { FlightData, FlightsResponse } from "@/types/flights";
-
-type ConnectionStatus = "live" | "cached" | "stale" | "error" | "loading";
+import type { FlightData, FlightsResponse, ConnectionStatus } from "@/types/flights";
 
 /** Must match MAX_INSTANCES in FlightLayer.ts */
 const MAX_RENDERED = 6000;
@@ -19,6 +19,9 @@ export default function Globe() {
   const [rawFlights, setRawFlights] = useState<FlightData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [leftHidden, setLeftHidden] = useState(false);
+  const [rightHidden, setRightHidden] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [engineReady, setEngineReady] = useState(false);
   const [loadingDone, setLoadingDone] = useState(false);
@@ -105,8 +108,8 @@ export default function Globe() {
 
   // Filter flights by search
   const filtered = useMemo(() => {
-    if (!search) return flights;
-    const q = search.toLowerCase();
+    if (!search || !search.trim()) return flights;
+    const q = search.trim().toLowerCase();
     return flights.filter(
       (f) => f.cs.toLowerCase().includes(q) || f.id.toLowerCase().includes(q),
     );
@@ -115,11 +118,16 @@ export default function Globe() {
   // Single click = select (center camera, show detail, no zoom-in)
   const handleSelect = useCallback((id: string | null) => {
     setSelectedId(id);
+    if (id) {
+      setRightHidden(false);
+      setMobileMenuOpen(false); // auto-close drawer on mobile
+    }
   }, []);
 
   // Double click = select + zoom in close
   const handleZoom = useCallback((id: string) => {
     setSelectedId(id);
+    setMobileMenuOpen(false);
     engineRefStable.current?.zoomIn();
   }, [engineRefStable]);
 
@@ -135,6 +143,14 @@ export default function Globe() {
     setLoadingDone(true);
   }, []);
 
+  const handleToggleMobileMenu = useCallback(() => {
+    setMobileMenuOpen((o) => !o);
+  }, []);
+
+  const handleCloseMobileMenu = useCallback(() => {
+    setMobileMenuOpen(false);
+  }, []);
+
   const showPanels = loadingDone;
 
   return (
@@ -147,6 +163,25 @@ export default function Globe() {
 
       {showPanels && (
         <>
+          {/* ── Mobile components ── */}
+          <MobileTopBar
+            menuOpen={mobileMenuOpen}
+            onToggleMenu={handleToggleMobileMenu}
+            search={search}
+            onSearchChange={handleSearchChange}
+            status={connectionStatus}
+            flightCount={rawFlights.length}
+          />
+          <MobileFlightDrawer
+            open={mobileMenuOpen}
+            onClose={handleCloseMobileMenu}
+            flights={filtered}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            onZoom={handleZoom}
+          />
+
+          {/* ── Desktop flight panel (hidden on mobile) ── */}
           <FlightPanel
             flights={filtered}
             totalCount={rawFlights.length}
@@ -157,10 +192,49 @@ export default function Globe() {
             onZoom={handleZoom}
             status={connectionStatus}
             animate
-            collapsed={!!selectedFlight}
+            hidden={leftHidden}
           />
+          {/* Left panel toggle (desktop only) */}
+          <button
+            onClick={() => setLeftHidden((h) => !h)}
+            className={[
+              "hidden sm:flex fixed z-20 top-1/2 -translate-y-1/2 items-center justify-center",
+              "w-5 h-10 bg-black/50 backdrop-blur-sm border border-white/10 rounded-r-md",
+              "text-white/40 hover:text-white/70 hover:bg-black/70 transition-[left] duration-300",
+              leftHidden ? "left-0" : "left-[304px]",
+            ].join(" ")}
+            title={leftHidden ? "Show flight list" : "Hide flight list"}
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {leftHidden
+                ? <polyline points="9 18 15 12 9 6" />
+                : <polyline points="15 18 9 12 15 6" />
+              }
+            </svg>
+          </button>
+
           {selectedFlight && (
-            <FlightDetail flight={selectedFlight} onClose={handleClose} animate />
+            <>
+              <FlightDetail flight={selectedFlight} onClose={handleClose} animate hidden={rightHidden} />
+              {/* Right panel toggle (desktop only) */}
+              <button
+                onClick={() => setRightHidden((h) => !h)}
+                className={[
+                  "hidden sm:flex fixed z-20 top-1/2 -translate-y-1/2 items-center justify-center",
+                  "w-5 h-10 bg-black/50 backdrop-blur-sm border border-white/10 rounded-l-md",
+                  "text-white/40 hover:text-white/70 hover:bg-black/70 transition-[right] duration-300",
+                  rightHidden ? "right-0" : "right-[336px]",
+                ].join(" ")}
+                title={rightHidden ? "Show flight detail" : "Hide flight detail"}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  {rightHidden
+                    ? <polyline points="15 18 9 12 15 6" />
+                    : <polyline points="9 18 15 12 9 6" />
+                  }
+                </svg>
+              </button>
+            </>
           )}
         </>
       )}

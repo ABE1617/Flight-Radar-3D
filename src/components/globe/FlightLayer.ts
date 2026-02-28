@@ -4,6 +4,20 @@ import type { FlightData } from '@/types/flights';
 
 const MAX_INSTANCES = 6000;
 
+/** Aircraft size class derived from ADS-B category */
+const enum PlaneClass {
+  Light = 0,   // cat 2, 8-14, or unknown — small props, helicopters, gliders
+  Medium = 1,  // cat 3 — private jets, turboprops
+  Heavy = 2,   // cat 4-7 — airliners, heavy transports
+}
+const PLANE_CLASS_COUNT = 3;
+
+function classifyFlight(cat: number): PlaneClass {
+  if (cat >= 4 && cat <= 7) return PlaneClass.Heavy;
+  if (cat === 3) return PlaneClass.Medium;
+  return PlaneClass.Light;
+}
+
 interface LiveFlight {
   id: string;
   lat: number;
@@ -31,13 +45,14 @@ export class FlightLayer {
   // Depth-only globe sphere — occludes back-side flights without drawing color
   private depthSphere: THREE.Mesh;
 
-  private mesh: THREE.InstancedMesh;
-  private mat: THREE.MeshBasicMaterial;
-  private tex: THREE.CanvasTexture;
+  // One instanced mesh per plane class
+  private meshes: THREE.InstancedMesh[] = [];
+  private mats: THREE.MeshBasicMaterial[] = [];
+  private textures: THREE.CanvasTexture[] = [];
 
   private selMesh: THREE.Mesh;
   private selMat: THREE.MeshBasicMaterial;
-  private selTex: THREE.CanvasTexture;
+  private selTextures: THREE.CanvasTexture[] = [];
 
   // Stem lines from globe surface to each flight icon
   private stemGeo: THREE.BufferGeometry;
@@ -72,27 +87,36 @@ export class FlightLayer {
     );
     this.group.add(this.depthSphere);
 
-    // Normal flights: bright white
-    this.tex = this._createTexture('#ffffff');
-    this.mat = new THREE.MeshBasicMaterial({
-      map: this.tex,
-      transparent: true,
-      alphaTest: 0.1,
-      depthTest: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-
     const geo = new THREE.PlaneGeometry(1, 1);
-    this.mesh = new THREE.InstancedMesh(geo, this.mat, MAX_INSTANCES);
-    this.mesh.count = 0;
-    this.mesh.frustumCulled = false;
-    this.group.add(this.mesh);
 
-    // Selected flight: bright yellow
-    this.selTex = this._createTexture('#ffcc00');
+    // Create one instanced mesh per plane class
+    for (let c = 0; c < PLANE_CLASS_COUNT; c++) {
+      const tex = this._createTexture('#ffffff', c as PlaneClass);
+      this.textures.push(tex);
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        alphaTest: 0.1,
+        depthTest: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      this.mats.push(mat);
+
+      const mesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      this.meshes.push(mesh);
+      this.group.add(mesh);
+
+      // Pre-create selected textures per class (hi-res since they scale up)
+      this.selTextures.push(this._createTexture('#ffcc00', c as PlaneClass, true));
+    }
+
+    // Selected flight: starts with heavy texture, swapped dynamically
     this.selMat = new THREE.MeshBasicMaterial({
-      map: this.selTex,
+      map: this.selTextures[PlaneClass.Heavy],
       transparent: true,
       alphaTest: 0.1,
       depthTest: true,
@@ -183,57 +207,74 @@ export class FlightLayer {
   }
 
   private _rebuildInstances() {
-    const count = Math.min(this.live.length, MAX_INSTANCES);
-    this.mesh.count = count;
+    const total = Math.min(this.live.length, MAX_INSTANCES);
+
+    // Bucket flights by class
+    const buckets: number[][] = [[], [], []];
+    for (let i = 0; i < total; i++) {
+      buckets[classifyFlight(this.live[i].cat)].push(i);
+    }
 
     const stemPos = this.stemGeo.attributes.position as THREE.BufferAttribute;
     let foundSelected = false;
+    let stemIdx = 0;
 
-    for (let i = 0; i < count; i++) {
-      const f = this.live[i];
-      const isSel = f.id === this.selectedId;
+    for (let c = 0; c < PLANE_CLASS_COUNT; c++) {
+      const bucket = buckets[c];
+      const mesh = this.meshes[c];
+      mesh.count = bucket.length;
 
-      // Compute normal basis for stem positions
-      this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.12);
+      for (let mi = 0; mi < bucket.length; mi++) {
+        const fi = bucket[mi];
+        const f = this.live[fi];
+        const isSel = f.id === this.selectedId;
 
-      // Stem: surface → icon position
-      const si = i * 6;
-      stemPos.array[si]     = this._surfacePos.x;
-      stemPos.array[si + 1] = this._surfacePos.y;
-      stemPos.array[si + 2] = this._surfacePos.z;
-      stemPos.array[si + 3] = this._pos.x;
-      stemPos.array[si + 4] = this._pos.y;
-      stemPos.array[si + 5] = this._pos.z;
+        this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.12);
 
-      if (isSel) {
-        // Hide the white instance so it doesn't show through the yellow selection
-        this._basis.makeScale(0, 0, 0);
-        this.mesh.setMatrixAt(i, this._basis);
+        // Stem line
+        const si = stemIdx * 6;
+        stemPos.array[si]     = this._surfacePos.x;
+        stemPos.array[si + 1] = this._surfacePos.y;
+        stemPos.array[si + 2] = this._surfacePos.z;
+        stemPos.array[si + 3] = this._pos.x;
+        stemPos.array[si + 4] = this._pos.y;
+        stemPos.array[si + 5] = this._pos.z;
+        stemIdx++;
 
-        foundSelected = true;
-        this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.3);
-        this.selMesh.matrix.copy(this._basis);
-        this.selMesh.matrixAutoUpdate = false;
-        this.selMesh.visible = true;
-      } else {
-        this.mesh.setMatrixAt(i, this._basis);
+        if (isSel) {
+          // Hide the instance so it doesn't show through the yellow selection
+          this._basis.makeScale(0, 0, 0);
+          mesh.setMatrixAt(mi, this._basis);
+
+          foundSelected = true;
+          // Swap to the correct selected texture for this class
+          this.selMat.map = this.selTextures[c];
+          this.selMat.needsUpdate = true;
+
+          this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.3);
+          this.selMesh.matrix.copy(this._basis);
+          this.selMesh.matrixAutoUpdate = false;
+          this.selMesh.visible = true;
+        } else {
+          mesh.setMatrixAt(mi, this._basis);
+        }
+
+        this.color.setRGB(1, 1, 1);
+        mesh.setColorAt(mi, this.color);
       }
 
-      this.color.setRGB(1, 1, 1);
-      this.mesh.setColorAt(i, this.color);
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) {
+        mesh.instanceColor.needsUpdate = true;
+      }
     }
 
     if (!foundSelected) {
       this.selMesh.visible = false;
     }
 
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) {
-      this.mesh.instanceColor.needsUpdate = true;
-    }
-
     stemPos.needsUpdate = true;
-    this.stemGeo.setDrawRange(0, count * 2);
+    this.stemGeo.setDrawRange(0, stemIdx * 2);
   }
 
   /**
@@ -298,8 +339,10 @@ export class FlightLayer {
     return f ? { lat: f.lat, lng: f.lng } : null;
   }
 
-  private _createTexture(fillColor: string): THREE.CanvasTexture {
-    const size = 128;
+  // ── Texture generators per plane class ──────────────────────────
+
+  private _createTexture(fillColor: string, planeClass: PlaneClass, hiRes = false): THREE.CanvasTexture {
+    const size = hiRes ? 512 : 128;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -309,8 +352,12 @@ export class FlightLayer {
     ctx.save();
     ctx.translate(size / 2, size / 2);
 
-    const s = 1.8;
     ctx.fillStyle = fillColor;
+
+    // Same silhouette, uniform scale per class; multiply by canvas ratio for hi-res
+    const r = size / 128;
+    const s = [1.3, 1.55, 1.8][planeClass] * r;
+
     ctx.beginPath();
     ctx.moveTo(0, -22 * s);
     ctx.lineTo(3 * s, -10 * s);
@@ -339,15 +386,17 @@ export class FlightLayer {
   }
 
   dispose() {
-    this.mesh.removeFromParent();
-    this.mesh.geometry.dispose();
-    this.mat.dispose();
-    this.tex.dispose();
+    for (let c = 0; c < PLANE_CLASS_COUNT; c++) {
+      this.meshes[c].removeFromParent();
+      this.meshes[c].geometry.dispose();
+      this.mats[c].dispose();
+      this.textures[c].dispose();
+      this.selTextures[c].dispose();
+    }
 
     this.selMesh.removeFromParent();
     this.selMesh.geometry.dispose();
     this.selMat.dispose();
-    this.selTex.dispose();
 
     this.stems.removeFromParent();
     this.stemGeo.dispose();

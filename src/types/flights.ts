@@ -38,6 +38,8 @@ export interface RouteInfo {
   stops?: RouteAirport[];
 }
 
+export type ConnectionStatus = "live" | "cached" | "stale" | "error" | "loading";
+
 export interface AircraftMeta {
   registration: string;
   manufacturerName: string;

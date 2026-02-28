@@ -561,7 +561,7 @@ export class GlobeEngine {
         const ring = poly[ri];
         ctx.beginPath();
         for (let i = 0; i < ring.length; i++) {
-          const [lng, lat] = ring[i];
+          const [lng, lat] = ring[i] as [number, number];
           // Equirectangular projection: lng [-180,180] → [0, W], lat [90,-90] → [0, H]
           const x = ((lng + 180) / 360) * W;
           const y = ((90 - lat) / 180) * H;

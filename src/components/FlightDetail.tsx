@@ -7,6 +7,7 @@ interface FlightDetailProps {
   flight: FlightData;
   onClose: () => void;
   animate?: boolean;
+  hidden?: boolean;
 }
 
 const CATEGORY_LABELS: Record<number, string> = {
@@ -30,11 +31,17 @@ const CATEGORY_LABELS: Record<number, string> = {
   17: "Point obstacle",
 };
 
-export default function FlightDetail({ flight, onClose, animate }: FlightDetailProps) {
+export default function FlightDetail({ flight, onClose, animate, hidden }: FlightDetailProps) {
   const [meta, setMeta] = useState<AircraftMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  // Reset to compact when flight changes
+  useEffect(() => {
+    setExpanded(false);
+  }, [flight.id]);
 
   useEffect(() => {
     let active = true;
@@ -102,28 +109,96 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
   return (
     <div
       className={[
-        // Mobile: full-screen overlay
-        "fixed inset-0 z-20 flex flex-col bg-black/80 backdrop-blur-md overflow-hidden",
-        // Desktop: right sidebar
-        "sm:z-10 sm:inset-auto sm:top-4 sm:right-4 sm:bottom-4 sm:left-auto sm:w-80 sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl",
-        // Animation
-        animate ? "anim-panel-right" : "",
+        // ── Mobile: bottom sheet ──
+        "fixed left-0 right-0 bottom-0 z-20 flex flex-col bg-black/80 backdrop-blur-md rounded-t-2xl",
+        "transition-[max-height] duration-300 ease-in-out",
+        expanded ? "max-h-[70dvh] overflow-hidden" : "max-h-[180px] overflow-hidden",
+        // ── Desktop: right sidebar (unchanged) ──
+        "sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:max-h-none sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
+        hidden ? "sm:right-[calc(-20rem-1rem)]" : "sm:right-4",
       ].join(" ")}
+      style={{
+        paddingBottom: expanded ? "env(safe-area-inset-bottom, 0px)" : undefined,
+      }}
     >
-      {/* Hero Header */}
-      <div className="relative px-4 pt-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
-        {/* Close button */}
+      {/* ── Mobile drag handle + compact header ── */}
+      <div className="sm:hidden shrink-0">
+        {/* Tap entire header area to toggle expand/collapse */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpanded((e) => !e)}
+          className="cursor-pointer"
+        >
+          {/* Drag handle pill */}
+          <div className="w-full flex flex-col items-center pt-2.5 pb-1.5">
+            <div className="w-10 h-1 rounded-full bg-white/30" />
+          </div>
+
+          {/* Compact header: callsign, phase, metrics */}
+          <div className="px-4 pb-3 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              {/* Callsign + phase */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-yellow-400 font-mono truncate">
+                  {flight.cs || "Unknown"}
+                </span>
+                <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${phaseColor}`}>
+                  {phase}
+                </span>
+              </div>
+              {/* Key metrics row */}
+              <div className="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-white/50">
+                <span>
+                  <span className="text-white/25">ALT </span>
+                  <span className="text-white/70">{altFt.toLocaleString()}ft</span>
+                </span>
+                <span>
+                  <span className="text-white/25">SPD </span>
+                  <span className="text-white/70">{Math.round(flight.vel * 1.944)}kt</span>
+                </span>
+                <span>
+                  <span className="text-white/25">HDG </span>
+                  <span className="text-white/70">{Math.round(flight.hdg)}°</span>
+                </span>
+              </div>
+            </div>
+            {/* Close button — stops propagation so it doesn't toggle expand */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              className="text-white/40 hover:text-white/70 transition-colors p-2 -mr-1 -mt-0.5 rounded-full hover:bg-white/10"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Expand/collapse chevron hint */}
+        <div className="flex justify-center pb-1">
+          <svg
+            className={`w-4 h-4 text-white/20 transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </div>
+      </div>
+
+      {/* ── Desktop hero header (hidden on mobile) ── */}
+      <div className="hidden sm:block relative px-4 pt-4 pb-3">
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-white/40 hover:text-white/70 transition-colors p-2 sm:p-1 rounded-full sm:rounded hover:bg-white/10 sm:hover:bg-white/5 z-10"
+          className="absolute top-3 right-3 text-white/40 hover:text-white/70 transition-colors p-1 rounded hover:bg-white/5 z-10"
         >
-          <svg className="w-5 h-5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
 
-        {/* Icon + Callsign */}
         <div className="flex flex-col items-center text-center">
           <AirlineLogo icao={meta?.operatorIcao} callsign={flight.cs} />
           <div className="text-xl font-bold text-yellow-400 tracking-wide">
@@ -136,7 +211,6 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
             )}
           </div>
 
-          {/* Phase + Squawk badges */}
           <div className="flex items-center gap-1.5 mt-2 flex-wrap justify-center">
             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded ${phaseColor}`}>
               {phase}
@@ -162,14 +236,13 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
           </div>
         </div>
 
-        {/* Gradient separator */}
         <div className="mt-3 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
       </div>
 
       {/* Route Banner */}
       <RouteBar route={route} loading={routeLoading} />
 
-      {/* Content */}
+      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto flight-scrollbar px-4 pb-4 space-y-5">
 
         {/* Altitude Gauge */}
@@ -190,7 +263,6 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
               />
             </div>
             <div className="flex items-center gap-1 text-xs font-mono">
-              {/* Up/down arrow */}
               {flight.vr > 0.5 ? (
                 <svg className="w-3 h-3 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="18 15 12 9 6 15" />
@@ -220,7 +292,6 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
         <div>
           <SectionTitle>Speed & Heading</SectionTitle>
           <div className="mt-2 flex items-start gap-4">
-            {/* Mini Compass */}
             <MiniCompass heading={flight.hdg} />
             <div className="flex-1 space-y-1.5 text-xs font-mono">
               <Row label="Ground" value={`${Math.round(flight.vel * 1.944)} kt`} />
@@ -346,10 +417,8 @@ function Row({
 function AirlineLogo({ icao, callsign }: { icao?: string; callsign?: string }) {
   const [failed, setFailed] = useState(false);
 
-  // Use operatorIcao from metadata, or derive from callsign prefix (first 3 letters)
   const code = icao || (callsign ? callsign.replace(/[0-9]/g, "").slice(0, 3) : "");
 
-  // Reset failed state when the airline code changes
   useEffect(() => {
     setFailed(false);
   }, [code]);
@@ -460,10 +529,8 @@ function MiniCompass({ heading }: { heading: number }) {
       viewBox={`0 0 ${size} ${size}`}
       className="shrink-0"
     >
-      {/* Outer circle */}
       <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
 
-      {/* Cardinal ticks */}
       {[
         { angle: 0, label: "N" },
         { angle: 90, label: "E" },
@@ -495,7 +562,6 @@ function MiniCompass({ heading }: { heading: number }) {
         );
       })}
 
-      {/* Heading indicator */}
       {(() => {
         const rad = ((heading - 90) * Math.PI) / 180;
         const x = c + r * Math.cos(rad);
@@ -513,7 +579,6 @@ function MiniCompass({ heading }: { heading: number }) {
         );
       })()}
 
-      {/* Center dot */}
       <circle cx={c} cy={c} r="1.5" fill="rgba(0,255,255,0.5)" />
     </svg>
   );

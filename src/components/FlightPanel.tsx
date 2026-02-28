@@ -1,9 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import type { FlightData } from "@/types/flights";
-
-type ConnectionStatus = "live" | "cached" | "stale" | "error" | "loading";
+import type { FlightData, ConnectionStatus } from "@/types/flights";
 
 /* ICAO airline code → short display name */
 const AIRLINES: Record<string, string> = {
@@ -26,7 +24,7 @@ const AIRLINES: Record<string, string> = {
   WZZ:"Wizz Air",
 };
 
-function getAirline(callsign: string): string {
+export function getAirline(callsign: string): string {
   if (!callsign) return "";
   const prefix = callsign.replace(/[0-9]/g, "");
   return AIRLINES[prefix] ?? "";
@@ -42,11 +40,11 @@ interface FlightPanelProps {
   onZoom: (id: string) => void;
   status: ConnectionStatus;
   animate?: boolean;
-  collapsed?: boolean;
+  hidden?: boolean;
 }
 
 /* ─── Animated Counter ───────────────────────────── */
-function useAnimatedCount(target: number, duration = 500) {
+export function useAnimatedCount(target: number, duration = 500) {
   const [display, setDisplay] = useState(target);
   const prevRef = useRef(target);
 
@@ -73,7 +71,7 @@ function useAnimatedCount(target: number, duration = 500) {
 }
 
 /* ─── Flight Row ─────────────────────────────────── */
-const FlightRow = memo(function FlightRow({
+export const FlightRow = memo(function FlightRow({
   flight,
   isSelected,
   onSelect,
@@ -92,7 +90,7 @@ const FlightRow = memo(function FlightRow({
     <button
       onClick={() => onSelect(flight.id)}
       onDoubleClick={() => onZoom(flight.id)}
-      className={`w-full text-left px-3 py-3 sm:py-2 transition-colors border-b border-white/[0.03] ${
+      className={`w-full text-left px-3 py-2 transition-colors border-b border-white/[0.03] ${
         isSelected
           ? "bg-yellow-500/10 shadow-[inset_0_0_12px_rgba(234,179,8,0.08)]"
           : "hover:bg-white/[0.03] active:bg-white/[0.06]"
@@ -100,7 +98,6 @@ const FlightRow = memo(function FlightRow({
     >
       {/* Line 1 */}
       <div className="flex items-center gap-2">
-        {/* Tiny plane icon */}
         <svg
           className="w-2 h-2 shrink-0 text-white/20"
           viewBox="0 0 24 24"
@@ -118,7 +115,6 @@ const FlightRow = memo(function FlightRow({
         <span className="text-[10px] font-mono text-white/40 tabular-nums">
           FL{Math.round(altFt / 100)}
         </span>
-        {/* Altitude bar */}
         <div className="w-[2px] h-4 rounded-full bg-white/[0.06] relative overflow-hidden shrink-0">
           <div
             className="absolute bottom-0 left-0 w-full rounded-full bg-cyan-400/60"
@@ -143,7 +139,7 @@ const FlightRow = memo(function FlightRow({
 });
 
 /* ─── Status Bar ─────────────────────────────────── */
-const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string }> = {
+export const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string }> = {
   live:    { color: "bg-green-400", label: "LIVE" },
   cached:  { color: "bg-blue-400",  label: "CACHED" },
   stale:   { color: "bg-yellow-400", label: "STALE DATA" },
@@ -151,7 +147,7 @@ const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string }> 
   loading: { color: "bg-white/40",  label: "CONNECTING" },
 };
 
-/* ─── Main Panel ─────────────────────────────────── */
+/* ─── Main Panel (Desktop only) ──────────────────── */
 export default function FlightPanel({
   flights,
   totalCount,
@@ -161,8 +157,7 @@ export default function FlightPanel({
   onSelect,
   onZoom,
   status,
-  animate,
-  collapsed,
+  hidden,
 }: FlightPanelProps) {
   const capped = flights.slice(0, 200);
   const animatedCount = useAnimatedCount(totalCount);
@@ -171,24 +166,13 @@ export default function FlightPanel({
   return (
     <div
       className={[
-        // Mobile: bottom sheet
-        "fixed left-0 right-0 bottom-0 z-10 flex flex-col bg-black/70 backdrop-blur-md border-t border-white/10 rounded-t-2xl overflow-hidden transition-transform duration-300",
-        collapsed ? "translate-y-full" : "translate-y-0",
-        // Mobile height
-        "max-h-[45dvh]",
-        // Desktop: left sidebar
-        "sm:translate-y-0 sm:left-4 sm:right-auto sm:top-4 sm:bottom-4 sm:w-72 sm:max-h-none sm:border sm:border-white/10 sm:rounded-xl sm:border-t",
-        // Animation
-        animate ? "anim-panel-left" : "",
+        // Desktop only: left sidebar
+        "hidden sm:flex fixed top-4 bottom-4 w-72 z-10 flex-col bg-black/70 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden transition-[left] duration-300",
+        hidden ? "left-[calc(-18rem-1rem)]" : "left-4",
       ].join(" ")}
     >
-      {/* Mobile drag handle */}
-      <div className="flex justify-center pt-2 pb-1 sm:hidden">
-        <div className="w-10 h-1 rounded-full bg-white/20" />
-      </div>
-
       {/* Header */}
-      <div className="px-4 py-2 sm:py-3 border-b border-white/10">
+      <div className="px-4 py-3 border-b border-white/10">
         <div className="flex items-center gap-2">
           <div
             className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
@@ -197,11 +181,8 @@ export default function FlightPanel({
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
             Live Flights
           </span>
-          <span className="text-[10px] font-bold text-white/70 tabular-nums sm:hidden ml-auto">
-            {animatedCount}
-          </span>
         </div>
-        <div className="hidden sm:block text-xl font-bold text-white/90 tabular-nums leading-tight mt-0.5">
+        <div className="text-xl font-bold text-white/90 tabular-nums leading-tight mt-0.5">
           {animatedCount}
         </div>
       </div>
@@ -210,7 +191,7 @@ export default function FlightPanel({
       <div className="px-3 py-2 border-b border-white/10">
         <div className="relative">
           <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-3 sm:h-3 text-white/30 pointer-events-none"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30 pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -226,14 +207,14 @@ export default function FlightPanel({
             placeholder="Search callsign..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-md pl-8 pr-8 py-2 sm:py-1.5 text-sm sm:text-xs text-white/90 placeholder:text-white/25 outline-none focus:border-cyan-500/50 focus:shadow-[0_0_8px_rgba(0,255,255,0.12)] transition-all"
+            className="w-full bg-white/5 border border-white/10 rounded-md pl-8 pr-8 py-1.5 text-xs text-white/90 placeholder:text-white/25 outline-none focus:border-cyan-500/50 focus:shadow-[0_0_8px_rgba(0,255,255,0.12)] transition-all"
           />
           {search && (
             <button
               onClick={() => onSearchChange("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
             >
-              <svg className="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -254,14 +235,14 @@ export default function FlightPanel({
           />
         ))}
         {capped.length === 0 && (
-          <div className="px-4 py-6 sm:py-8 text-center text-xs text-white/20">
+          <div className="px-4 py-8 text-center text-xs text-white/20">
             {search ? "No matching flights" : "No flights"}
           </div>
         )}
       </div>
 
       {/* Connection status bar */}
-      <div className="px-4 py-1.5 sm:py-2 border-t border-white/10 flex items-center gap-2 pb-[env(safe-area-inset-bottom,6px)]">
+      <div className="px-4 py-2 border-t border-white/10 flex items-center gap-2">
         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
         <span className="text-[9px] font-mono uppercase tracking-wider text-white/35">
           {label}
