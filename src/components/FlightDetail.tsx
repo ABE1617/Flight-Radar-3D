@@ -119,9 +119,7 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
 
         {/* Icon + Callsign */}
         <div className="flex flex-col items-center text-center">
-          <svg className="w-8 h-8 text-yellow-400 mb-1" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-          </svg>
+          <AirlineLogo icao={meta?.operatorIcao} callsign={flight.cs} />
           <div className="text-xl font-bold text-yellow-400 tracking-wide">
             {flight.cs || "Unknown"}
           </div>
@@ -334,6 +332,38 @@ function Row({
       <span className="text-white/30 shrink-0">{label}</span>
       <span className={`${valColor} text-right`}>{value}</span>
     </div>
+  );
+}
+
+/* ─── Airline Logo ───────────────────────────────── */
+
+function AirlineLogo({ icao, callsign }: { icao?: string; callsign?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  // Use operatorIcao from metadata, or derive from callsign prefix (first 3 letters)
+  const code = icao || (callsign ? callsign.replace(/[0-9]/g, "").slice(0, 3) : "");
+
+  // Reset failed state when the airline code changes
+  useEffect(() => {
+    setFailed(false);
+  }, [code]);
+
+  if (!code || failed) {
+    return (
+      <svg className="w-8 h-8 text-yellow-400 mb-1" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+      </svg>
+    );
+  }
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={`https://www.flightaware.com/images/airline_logos/90p/${code}.png`}
+      alt={code}
+      className="h-10 mb-1 object-contain drop-shadow-lg"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
