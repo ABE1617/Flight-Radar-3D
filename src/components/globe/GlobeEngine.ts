@@ -88,6 +88,7 @@ export class GlobeEngine {
   private orb: THREE.Mesh[] = [];
   private orbT!: THREE.LineSegments;
 
+  private _landTex: THREE.Texture | null = null;
   private _flightLayer: FlightLayer | null = null;
   private _selectedFlight: FlightData | null = null;
   private _ambientArcTimer: number | undefined;
@@ -108,10 +109,16 @@ export class GlobeEngine {
   private _raycaster = new THREE.Raycaster();
   private _clickNDC = new THREE.Vector2();
   private _globeHitSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 5 * 1.02);
-  private _onFlightClick: ((id: string) => void) | null = null;
+  private _onFlightClick: ((id: string | null) => void) | null = null;
   private _onReady: (() => void) | null = null;
   private _prevTrackedId: string | null = null;
   private _trackTransition = 0; // counts up after flight switch for fast initial lerp
+
+  // Reusable objects for quaternion-based flight tracking (avoids per-frame allocation)
+  private _qTarget = new THREE.Quaternion();
+  private _qCenter = new THREE.Quaternion();
+  private _qTilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.18);
+  private _pVec = new THREE.Vector3();
 
   // Drag-to-rotate state
   private _dragging = false;
@@ -206,9 +213,9 @@ export class GlobeEngine {
       let lng = Math.atan2(hitPoint.z, -hitPoint.x) * (180 / Math.PI) - 180;
       if (lng < -180) lng += 360;
 
-      // Find the nearest flight within a click threshold
+      // Find the nearest flight within a click threshold, or deselect
       const nearest = this._flightLayer.findNearest(lat, lng, 5);
-      if (nearest) this._onFlightClick(nearest);
+      this._onFlightClick(nearest ?? null);
     };
     this._boundWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -346,13 +353,25 @@ export class GlobeEngine {
   private _globeBody() {
     const geo = new THREE.SphereGeometry(this.R * 0.996, 96, 96);
     this.body = new THREE.Mesh(geo, new THREE.ShaderMaterial({
-      uniforms: { uLD: { value: this.ld }, uT: { value: 0 } },
+      uniforms: {
+        uLD: { value: this.ld }, uT: { value: 0 },
+        uLand: { value: null }, uHasLand: { value: 0.0 }
+      },
       vertexShader: `
         varying vec3 vN,vW,vP;
-        void main(){vN=normalize(normalMatrix*normal);vW=(modelMatrix*vec4(position,1.0)).xyz;vP=position;
-        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        varying vec2 vUV;
+        void main(){
+          vN=normalize(normalMatrix*normal);
+          vW=(modelMatrix*vec4(position,1.0)).xyz;
+          vP=position;
+          vUV=uv;
+          gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+        }`,
       fragmentShader: `
-        uniform vec3 uLD;uniform float uT;varying vec3 vN,vW,vP;
+        uniform vec3 uLD;uniform float uT;
+        uniform sampler2D uLand;uniform float uHasLand;
+        varying vec3 vN,vW,vP;
+        varying vec2 vUV;
         float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
         float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
         return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
@@ -362,8 +381,21 @@ export class GlobeEngine {
           float fresnel=pow(1.0-max(dot(N,V),0.0),5.0);
           vec2 sp=vec2(atan(vP.z,vP.x),asin(clamp(vP.y/length(vP),-1.0,1.0)));
           float pattern=n(sp*8.0+uT*0.02)*0.02;
-          vec3 dark=vec3(0.005,0.005,0.015);
-          vec3 lit=vec3(0.015,0.022,0.05)+pattern;
+
+          // Sample land mask
+          float land=0.0;
+          if(uHasLand>0.5) land=texture2D(uLand,vUV).r;
+
+          // Ocean colors (original dark blue)
+          vec3 darkSea=vec3(0.005,0.005,0.015);
+          vec3 litSea=vec3(0.015,0.022,0.05)+pattern;
+          // Land colors (slightly brighter, warmer tint)
+          vec3 darkLand=vec3(0.015,0.015,0.025);
+          vec3 litLand=vec3(0.035,0.04,0.065)+pattern;
+
+          vec3 dark=mix(darkSea,darkLand,land);
+          vec3 lit=mix(litSea,litLand,land);
+
           vec3 col=mix(dark,lit,light);
           col+=vec3(0.04,0.12,0.28)*fresnel*0.8;
           vec3 H=normalize(V+uLD);
@@ -488,17 +520,84 @@ export class GlobeEngine {
 
   private async _loadCountries() {
     let feat: any[] | null = null;
+    let topoJson: any = null;
     try {
       const r = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
-      const j = await r.json();
-      feat = (topojson.feature(j, j.objects.countries) as any).features;
+      topoJson = await r.json();
+      feat = (topojson.feature(topoJson, topoJson.objects.countries) as any).features;
     } catch { /* fall through to fallback */ }
-    if (feat) this._geo(feat); else this._fallback(COUNTRIES);
+    if (feat) {
+      this._geo(feat);
+      this._buildLandTexture(topoJson);
+    } else {
+      this._fallback(COUNTRIES);
+    }
     this.hlOrd = this.clng.map((lng, i) => ({ i, lng, n: this.cv[i].length }))
       .filter(o => o.n > 60).sort((a, b) => a.lng - b.lng).map(o => o.i);
     this.rdy = true;
     this._onReady?.();
     this._ambientArcTimer = 0;
+  }
+
+  /** Paint land polygons onto a 2D canvas → equirectangular texture for the globe body. */
+  private _buildLandTexture(topoJson: any) {
+    if (!topoJson) return;
+    const W = 2048, H = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+
+    // Ocean = transparent (shader handles ocean color), land = white
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+
+    // Merge all countries into a single land MultiPolygon
+    const land = topojson.merge(topoJson, topoJson.objects.countries.geometries);
+    const polys = land.type === 'MultiPolygon' ? land.coordinates : [land.coordinates];
+
+    for (const poly of polys) {
+      // Outer ring + holes
+      for (let ri = 0; ri < poly.length; ri++) {
+        const ring = poly[ri];
+        ctx.beginPath();
+        for (let i = 0; i < ring.length; i++) {
+          const [lng, lat] = ring[i];
+          // Equirectangular projection: lng [-180,180] → [0, W], lat [90,-90] → [0, H]
+          const x = ((lng + 180) / 360) * W;
+          const y = ((90 - lat) / 180) * H;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (ri === 0) ctx.fill(); // outer ring fills
+        else {
+          // Holes: clear with destination-out
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    // Fix north pole cutout: SphereGeometry UVs converge at the pole, so any
+    // transparent pixels at the top of the texture create a visible circular hole.
+    // Fill the top strip as land — the area is so small on the sphere it's invisible,
+    // but it eliminates the pole singularity artifact.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, 6);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    this._landTex = tex;
+
+    // Inject texture into globe body shader
+    const mat = this.body.material as THREE.ShaderMaterial;
+    mat.uniforms.uLand = { value: tex };
+    mat.uniforms.uHasLand = { value: 1.0 };
+    mat.needsUpdate = true;
   }
 
   private _geo(features: any[]) {
@@ -895,46 +994,56 @@ export class GlobeEngine {
     if (this._flightLayer) this._flightLayer.update(dt);
 
     // Check for selected flight — lock globe rotation + zoom
-    // Use the extrapolated live position so the camera tracks smoothly
     const selFlight = this._selectedFlight;
     const livePos = selFlight
       ? this._flightLayer?.getLiveFlight(selFlight.id) ?? null
       : null;
 
+    // --- Globe rotation ---
+    // Tracking uses quaternion slerp (no Euler coupling / clamp issues).
+    // Everything else uses the existing Euler angle system.
+    let useQuaternion = false;
+
     if (selFlight && livePos && !this._dragging) {
-      // Detect flight switch — use fast lerp for the first ~0.6s
+      // Detect flight switch — use fast slerp for the first ~0.6s
       if (selFlight.id !== this._prevTrackedId) {
         this._prevTrackedId = selFlight.id;
         this._trackTransition = 0;
       }
       this._trackTransition += dt;
 
-      // Get the extrapolated local-space 3D position
+      // Flight's 3D position in globe-local space
       const [px, py, pz] = latLngToVector3(livePos.lat, livePos.lng, this.R);
 
-      // Y-rotation: swing the point's XZ angle to face +Z (camera)
-      const targetY = -Math.atan2(px, pz);
+      // Quaternion that rotates the flight point onto the +Z axis.
+      // setFromUnitVectors(from, to) gives Q where Q * from = to.
+      // After Q, the point sits at (0, 0, R) — directly facing the camera.
+      this._pVec.set(px, py, pz).normalize();
+      this._qCenter.setFromUnitVectors(this._pVec, new THREE.Vector3(0, 0, 1));
 
-      // X-rotation: tilt to center the point's elevation
-      const rxz = Math.sqrt(px * px + pz * pz);
-      const elevAngle = Math.atan2(py, rxz);
-      const targetX = elevAngle - 0.12;
+      // Apply the cosmetic z-tilt (-0.18 rad) on top.
+      // Rotating around Z doesn't move a point on the Z axis, so
+      // centering stays perfect while the globe keeps its tilted look.
+      this._qTarget.multiplyQuaternions(this._qTilt, this._qCenter);
 
-      // Smooth angle interpolation (handle wrapping for Y)
-      let dY = targetY - this._userRotY;
-      dY -= Math.round(dY / (2 * Math.PI)) * (2 * Math.PI);
+      // Smooth slerp — fast (8x) during first 0.6s, then normal (3x)
+      const speed = this._trackTransition < 0.6 ? 8 : 3;
+      const t = 1 - Math.exp(-speed * dt);
+      this.g.quaternion.slerp(this._qTarget, t);
 
-      // Fast lerp during transition (8x), then settle to normal (3x)
-      const lerpSpeed = this._trackTransition < 0.6 ? 8 : 3;
-      this._userRotY += dY * lerpSpeed * dt;
-      this._userRotX += (targetX - this._userRotX) * lerpSpeed * dt;
-      this._userRotX = Math.max(-1.5, Math.min(1.5, this._userRotX));
+      // Sync Euler state from the quaternion so drag / auto-rotate can
+      // resume seamlessly when the flight is deselected.
+      this._userRotY = this.g.rotation.y;
+      this._userRotX = this.g.rotation.x - 0.12;
 
-      // Kill inertia
+      // Kill inertia & parallax
       this._dragVelX = 0;
       this._dragVelY = 0;
+      this.ms.x = 0;
+      this.ms.y = 0;
 
       this._targetCamZ = this._userZoom;
+      useQuaternion = true;
     } else if (!this._dragging) {
       // Auto-rotate
       this._userRotY += (Math.PI * 2 / 100) * dt;
@@ -950,28 +1059,30 @@ export class GlobeEngine {
       this._targetCamZ = this._userZoom;
     }
 
-    // Apply user rotation on top of the initial tilt
-    this.g.rotation.y = this._userRotY;
-    this.g.rotation.x = 0.12 + this._userRotX;
+    // When NOT tracking via quaternion, apply Euler angles as before
+    if (!useQuaternion) {
+      this.g.rotation.x = 0.12 + this._userRotX;
+      this.g.rotation.y = this._userRotY;
+      this.g.rotation.z = -0.18;
+    }
 
     // Smooth camera zoom
     this._camZ += (this._targetCamZ - this._camZ) * 3 * dt;
 
-    // Camera parallax from mouse (only when not dragging and no flight selected)
-    if (selFlight) {
-      // Decay parallax to zero when tracking a flight
-      this.ms.x += (0 - this.ms.x) * dt * 4;
-      this.ms.y += (0 - this.ms.y) * dt * 4;
-    } else if (!this._dragging) {
-      this.ms.x += (this.mouse.x - this.ms.x) * dt * 2.5;
-      this.ms.y += (this.mouse.y - this.ms.y) * dt * 2.5;
-    } else {
-      // Smoothly return camera parallax to center during drag
-      this.ms.x *= 0.95;
-      this.ms.y *= 0.95;
+    // Camera parallax (disabled when tracking a flight)
+    if (!selFlight) {
+      if (!this._dragging) {
+        this.ms.x += (this.mouse.x - this.ms.x) * dt * 2.5;
+        this.ms.y += (this.mouse.y - this.ms.y) * dt * 2.5;
+      } else {
+        this.ms.x *= 0.95;
+        this.ms.y *= 0.95;
+      }
     }
+
+    // Camera position — when tracking, sits at exactly (0, 0, Z)
+    // so the quaternion centering is pixel-perfect at any zoom.
     this.cam.position.x = this.ms.x * 0.6;
-    // Reduce the Y offset when zoomed in on a flight
     const camYBase = selFlight ? 0 : 2;
     this.cam.position.y = camYBase - this.ms.y * 0.35;
     this.cam.position.z = this._camZ;
@@ -1008,7 +1119,7 @@ export class GlobeEngine {
     this._flightLayer?.setFlights(flights);
   }
 
-  setOnFlightClick(cb: ((id: string) => void) | null) {
+  setOnFlightClick(cb: ((id: string | null) => void) | null) {
     this._onFlightClick = cb;
   }
 

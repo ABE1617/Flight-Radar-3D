@@ -193,8 +193,8 @@ export class FlightLayer {
       const f = this.live[i];
       const isSel = f.id === this.selectedId;
 
+      // Compute normal basis for stem positions
       this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.12);
-      this.mesh.setMatrixAt(i, this._basis);
 
       // Stem: surface → icon position
       const si = i * 6;
@@ -205,16 +205,22 @@ export class FlightLayer {
       stemPos.array[si + 4] = this._pos.y;
       stemPos.array[si + 5] = this._pos.z;
 
-      this.color.setRGB(1, 1, 1);
-      this.mesh.setColorAt(i, this.color);
-
       if (isSel) {
+        // Hide the white instance so it doesn't show through the yellow selection
+        this._basis.makeScale(0, 0, 0);
+        this.mesh.setMatrixAt(i, this._basis);
+
         foundSelected = true;
         this._computeBasis(f.lat, f.lng, f.hdg, f.alt, 0.3);
         this.selMesh.matrix.copy(this._basis);
         this.selMesh.matrixAutoUpdate = false;
         this.selMesh.visible = true;
+      } else {
+        this.mesh.setMatrixAt(i, this._basis);
       }
+
+      this.color.setRGB(1, 1, 1);
+      this.mesh.setColorAt(i, this.color);
     }
 
     if (!foundSelected) {

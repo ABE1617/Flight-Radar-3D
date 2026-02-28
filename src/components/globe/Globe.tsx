@@ -36,10 +36,10 @@ export default function Globe() {
   useEffect(() => {
     if (!containerRef.current || engineRef.current) return;
     const engine = new GlobeEngine(containerRef.current);
-    // Globe click = select + zoom in
+    // Globe click = select + zoom in, or deselect when clicking empty space
     engine.setOnFlightClick((id) => {
       selectRef.current(id);
-      engine.zoomIn();
+      if (id) engine.zoomIn();
     });
     engine.setOnReady(() => setEngineReady(true));
     engineRef.current = engine;
