@@ -93,7 +93,7 @@ async function fetchAdsbLol(): Promise<FlightData[] | null> {
         hdg: track,
         vr: baroRate,
         cs: ((a.flight as string) ?? '').trim(),
-        origin: '', // adsb.lol doesn't provide origin country
+        origin: ((a.r as string) ?? '').trim(), // registration (e.g. N12345, 9V-SGA)
         squawk: ((a.squawk as string) ?? '').trim(),
         cat: categoryToNumber(a.category as string | undefined),
         lastContact: Math.round(Date.now() / 1000 - ((a.seen as number) ?? 0)),

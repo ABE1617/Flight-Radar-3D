@@ -101,17 +101,23 @@ export default function FlightDetail({ flight, onClose, animate }: FlightDetailP
 
   return (
     <div
-      className="fixed top-4 right-4 bottom-4 w-80 z-10 flex flex-col bg-black/60 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden"
-      style={animate ? { animation: "panelSlideInRight 0.5s ease-out both" } : undefined}
+      className={[
+        // Mobile: full-screen overlay
+        "fixed inset-0 z-20 flex flex-col bg-black/80 backdrop-blur-md overflow-hidden",
+        // Desktop: right sidebar
+        "sm:z-10 sm:inset-auto sm:top-4 sm:right-4 sm:bottom-4 sm:left-auto sm:w-80 sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl",
+        // Animation
+        animate ? "anim-panel-right" : "",
+      ].join(" ")}
     >
       {/* Hero Header */}
-      <div className="relative px-4 pt-4 pb-3">
+      <div className="relative px-4 pt-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-white/30 hover:text-white/70 transition-colors p-1 rounded hover:bg-white/5"
+          className="absolute top-3 right-3 text-white/40 hover:text-white/70 transition-colors p-2 sm:p-1 rounded-full sm:rounded hover:bg-white/10 sm:hover:bg-white/5 z-10"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg className="w-5 h-5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>

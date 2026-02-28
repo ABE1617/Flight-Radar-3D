@@ -157,6 +157,7 @@ export default function Globe() {
             onZoom={handleZoom}
             status={connectionStatus}
             animate
+            collapsed={!!selectedFlight}
           />
           {selectedFlight && (
             <FlightDetail flight={selectedFlight} onClose={handleClose} animate />

@@ -5,6 +5,33 @@ import type { FlightData } from "@/types/flights";
 
 type ConnectionStatus = "live" | "cached" | "stale" | "error" | "loading";
 
+/* ICAO airline code → short display name */
+const AIRLINES: Record<string, string> = {
+  AAL:"American",AAR:"Asiana",AAY:"Allegiant",ACA:"Air Canada",AFR:"Air France",
+  AIC:"Air India",AIJ:"Interjet",ANA:"ANA",ASA:"Alaska",AVA:"Avianca",
+  AZA:"Alitalia",AZU:"Azul",BAW:"British Airways",BER:"Berline",CAL:"China Airlines",
+  CCA:"Air China",CES:"China Eastern",CMP:"Copa",CPA:"Cathay Pacific",
+  CSN:"China Southern",DAL:"Delta",DLH:"Lufthansa",EDV:"Endeavor",EIN:"Aer Lingus",
+  EJA:"NetJets",ENY:"Envoy",ETH:"Ethiopian",EVA:"EVA Air",EWG:"Eurowings",
+  EZY:"easyJet",FDX:"FedEx",FFT:"Frontier",GAL:"GoAir",GIA:"Garuda",
+  GLO:"GOL",GTI:"Atlas Air",HAL:"Hawaiian",IBE:"Iberia",ICE:"Icelandair",
+  IGO:"IndiGo",JAL:"Japan Airlines",JBU:"JetBlue",JIA:"PSA Airlines",
+  JST:"Jetstar",KAL:"Korean Air",KLM:"KLM",LNI:"Lion Air",MAS:"Malaysia",
+  MXY:"Breeze",NKS:"Spirit",PAL:"Philippine",POE:"Porter",QFA:"Qantas",
+  QTR:"Qatar Airways",RAM:"Royal Air Maroc",RPA:"Republic",RYR:"Ryanair",
+  SAS:"SAS",SIA:"Singapore",SKW:"SkyWest",SWA:"Southwest",SWR:"Swiss",
+  TAM:"LATAM",TAP:"TAP Portugal",THA:"Thai Airways",THY:"Turkish",
+  TSC:"Air Transat",UAE:"Emirates",UAL:"United",UPS:"UPS",VIR:"Virgin Atlantic",
+  VIV:"Viva Aerobus",VOI:"Volaris",VOZ:"Virgin Australia",WJA:"WestJet",
+  WZZ:"Wizz Air",
+};
+
+function getAirline(callsign: string): string {
+  if (!callsign) return "";
+  const prefix = callsign.replace(/[0-9]/g, "");
+  return AIRLINES[prefix] ?? "";
+}
+
 interface FlightPanelProps {
   flights: FlightData[];
   totalCount: number;
@@ -15,6 +42,7 @@ interface FlightPanelProps {
   onZoom: (id: string) => void;
   status: ConnectionStatus;
   animate?: boolean;
+  collapsed?: boolean;
 }
 
 /* ─── Animated Counter ───────────────────────────── */
@@ -64,10 +92,10 @@ const FlightRow = memo(function FlightRow({
     <button
       onClick={() => onSelect(flight.id)}
       onDoubleClick={() => onZoom(flight.id)}
-      className={`w-full text-left px-3 py-2 transition-colors border-b border-white/[0.03] ${
+      className={`w-full text-left px-3 py-3 sm:py-2 transition-colors border-b border-white/[0.03] ${
         isSelected
           ? "bg-yellow-500/10 shadow-[inset_0_0_12px_rgba(234,179,8,0.08)]"
-          : "hover:bg-white/[0.03]"
+          : "hover:bg-white/[0.03] active:bg-white/[0.06]"
       }`}
     >
       {/* Line 1 */}
@@ -101,7 +129,7 @@ const FlightRow = memo(function FlightRow({
       {/* Line 2 */}
       <div className="flex items-center gap-2 mt-0.5 pl-4">
         <span className="text-[10px] text-white/25 truncate flex-1">
-          {flight.origin || "Unknown"}
+          {getAirline(flight.cs) || flight.origin || flight.id.toUpperCase()}
         </span>
         <span className="text-[10px] font-mono text-white/30 tabular-nums">
           {speedKt}kt
@@ -134,6 +162,7 @@ export default function FlightPanel({
   onZoom,
   status,
   animate,
+  collapsed,
 }: FlightPanelProps) {
   const capped = flights.slice(0, 200);
   const animatedCount = useAnimatedCount(totalCount);
@@ -141,11 +170,25 @@ export default function FlightPanel({
 
   return (
     <div
-      className="fixed top-4 left-4 bottom-4 w-72 z-10 flex flex-col bg-black/60 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden"
-      style={animate ? { animation: "panelSlideInLeft 0.5s ease-out both" } : undefined}
+      className={[
+        // Mobile: bottom sheet
+        "fixed left-0 right-0 bottom-0 z-10 flex flex-col bg-black/70 backdrop-blur-md border-t border-white/10 rounded-t-2xl overflow-hidden transition-transform duration-300",
+        collapsed ? "translate-y-full" : "translate-y-0",
+        // Mobile height
+        "max-h-[45dvh]",
+        // Desktop: left sidebar
+        "sm:translate-y-0 sm:left-4 sm:right-auto sm:top-4 sm:bottom-4 sm:w-72 sm:max-h-none sm:border sm:border-white/10 sm:rounded-xl sm:border-t",
+        // Animation
+        animate ? "anim-panel-left" : "",
+      ].join(" ")}
     >
+      {/* Mobile drag handle */}
+      <div className="flex justify-center pt-2 pb-1 sm:hidden">
+        <div className="w-10 h-1 rounded-full bg-white/20" />
+      </div>
+
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/10">
+      <div className="px-4 py-2 sm:py-3 border-b border-white/10">
         <div className="flex items-center gap-2">
           <div
             className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
@@ -154,8 +197,11 @@ export default function FlightPanel({
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
             Live Flights
           </span>
+          <span className="text-[10px] font-bold text-white/70 tabular-nums sm:hidden ml-auto">
+            {animatedCount}
+          </span>
         </div>
-        <div className="text-xl font-bold text-white/90 tabular-nums leading-tight mt-0.5">
+        <div className="hidden sm:block text-xl font-bold text-white/90 tabular-nums leading-tight mt-0.5">
           {animatedCount}
         </div>
       </div>
@@ -163,9 +209,8 @@ export default function FlightPanel({
       {/* Search */}
       <div className="px-3 py-2 border-b border-white/10">
         <div className="relative">
-          {/* Search icon */}
           <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30 pointer-events-none"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-3 sm:h-3 text-white/30 pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -181,15 +226,14 @@ export default function FlightPanel({
             placeholder="Search callsign..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-md pl-8 pr-8 py-1.5 text-xs text-white/90 placeholder:text-white/25 outline-none focus:border-cyan-500/50 focus:shadow-[0_0_8px_rgba(0,255,255,0.12)] transition-all"
+            className="w-full bg-white/5 border border-white/10 rounded-md pl-8 pr-8 py-2 sm:py-1.5 text-sm sm:text-xs text-white/90 placeholder:text-white/25 outline-none focus:border-cyan-500/50 focus:shadow-[0_0_8px_rgba(0,255,255,0.12)] transition-all"
           />
-          {/* Clear button */}
           {search && (
             <button
               onClick={() => onSearchChange("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
             >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg className="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -210,14 +254,14 @@ export default function FlightPanel({
           />
         ))}
         {capped.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-white/20">
+          <div className="px-4 py-6 sm:py-8 text-center text-xs text-white/20">
             {search ? "No matching flights" : "No flights"}
           </div>
         )}
       </div>
 
       {/* Connection status bar */}
-      <div className="px-4 py-2 border-t border-white/10 flex items-center gap-2">
+      <div className="px-4 py-1.5 sm:py-2 border-t border-white/10 flex items-center gap-2 pb-[env(safe-area-inset-bottom,6px)]">
         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
         <span className="text-[9px] font-mono uppercase tracking-wider text-white/35">
           {label}

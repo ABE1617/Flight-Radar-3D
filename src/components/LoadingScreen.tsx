@@ -99,15 +99,6 @@ export default function LoadingScreen({ ready, onComplete }: LoadingScreenProps)
         }}
       />
 
-      {/* Scan line */}
-      <div
-        className="absolute left-0 right-0 h-[1px] pointer-events-none"
-        style={{
-          background: "linear-gradient(90deg, transparent 0%, rgba(0,255,255,0.3) 20%, rgba(0,255,255,0.6) 50%, rgba(0,255,255,0.3) 80%, transparent 100%)",
-          animation: "scanLine 3s linear infinite",
-        }}
-      />
-
       {/* Ring */}
       <div
         className="absolute"
