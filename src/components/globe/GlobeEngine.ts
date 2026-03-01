@@ -1149,6 +1149,11 @@ export class GlobeEngine {
 
       this._targetCamZ = this._userZoom;
       useQuaternion = true;
+    } else if (selFlight && !livePos) {
+      // Flight selected but position not available yet — hold current orientation
+      // without falling through to Euler angles (which would snap to stale values)
+      useQuaternion = true;
+      this._targetCamZ = this._userZoom;
     } else if (!this._dragging) {
       // Auto-rotate (skip when paused)
       if (!this._paused) this._userRotY += (Math.PI * 2 / 100) * dt;
