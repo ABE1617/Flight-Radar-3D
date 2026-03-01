@@ -373,7 +373,7 @@ export default function FlightDetail({ flight, onClose, animate, hidden, zoomCon
           <div className="mt-2 space-y-1.5 text-xs font-mono">
             {metaLoading ? (
               <div className="text-[10px] text-white/25 py-1">Loading...</div>
-            ) : meta && (meta.manufacturerName || meta.model || meta.typecode || meta.registration || meta.owner) ? (
+            ) : meta && (meta.manufacturerName || meta.model) ? (
               <>
                 {meta.manufacturerName && <Row label="Make" value={meta.manufacturerName} />}
                 {meta.model && <Row label="Model" value={meta.model} />}
