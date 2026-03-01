@@ -85,6 +85,8 @@ export class GlobeEngine {
   private body!: THREE.Mesh;
   private scanDots!: THREE.Points;
   private outl!: THREE.LineSegments;
+  private _outlScene: THREE.Scene | null = null;
+  private _outlGroup!: THREE.Group;
   private orb: THREE.Mesh[] = [];
   private orbT!: THREE.LineSegments;
 
@@ -782,12 +784,16 @@ export class GlobeEngine {
         uniform vec3 uC;varying float vL,vR,vF;
         void main(){
           float edge=smoothstep(0.0,0.14,vF);
-          float alpha=(0.08+0.28*vL+0.20*vR)*edge;
-          vec3 col=uC*(0.45+0.55*vL)+vec3(0.1,0.2,0.4)*vR*0.5;
+          float alpha=(0.06+0.18*vL)*edge;
+          vec3 col=uC*(0.45+0.55*vL);
           gl_FragColor=vec4(col,alpha);}`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, depthWrite: false, depthTest: false
     }));
-    this.g.add(this.outl);
+    // Render in separate scene after bloom — no glow
+    this._outlScene = new THREE.Scene();
+    this._outlGroup = new THREE.Group();
+    this._outlGroup.add(this.outl);
+    this._outlScene.add(this._outlGroup);
   }
 
   /* ═══════════════ HIGHLIGHT SYSTEM ════════════════════ */
@@ -1187,7 +1193,8 @@ export class GlobeEngine {
     this.cam.position.z = this._camZ;
     this.cam.lookAt(0, 0, 0);
 
-    this._updateHL(dt);
+    // Country highlight glow disabled — arcs restored
+    // this._updateHL(dt);
     this._updateArcs(dt);
 
     if (this._ambientArcTimer !== undefined) {
@@ -1200,6 +1207,15 @@ export class GlobeEngine {
 
     if (this.useC) this.comp.render();
     else this.ren.render(this.scene, this.cam);
+
+    // Render country outlines AFTER bloom — flat lines, no glow.
+    if (this._outlScene) {
+      this._outlGroup.rotation.copy(this.g.rotation);
+      this._outlGroup.position.copy(this.g.position);
+      this._outlGroup.scale.copy(this.g.scale);
+      this.ren.autoClear = false;
+      this.ren.render(this._outlScene, this.cam);
+    }
 
     // Render flights AFTER bloom — normal colors, no glow.
     // The flight scene has its own depth-only globe sphere for back-face occlusion.

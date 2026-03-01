@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type { FlightData, AircraftMeta, RouteInfo } from "@/types/flights";
+import { AIRPLANE_PATH } from "@/components/FlightPanel";
 
 interface FlightDetailProps {
   flight: FlightData;
@@ -128,39 +129,43 @@ export default function FlightDetail({ flight, onClose, animate, hidden, zoomCon
     };
   }, [flight.cs, flight.lat, flight.lng]);
 
-  const phase =
-    flight.vr > 2 ? "Climbing" : flight.vr < -2 ? "Descending" : "Cruising";
-  const phaseColor =
-    flight.vr > 2
+  const { phase, phaseColor, altFt, altPct, cardinal, vrFpm } = useMemo(() => {
+    const p = flight.vr > 2 ? "Climbing" : flight.vr < -2 ? "Descending" : "Cruising";
+    const pc = flight.vr > 2
       ? "text-green-400 bg-green-500/15"
       : flight.vr < -2
         ? "text-orange-400 bg-orange-500/15"
         : "text-cyan-400 bg-cyan-500/15";
+    const af = Math.round(flight.alt * 3.281);
+    return {
+      phase: p,
+      phaseColor: pc,
+      altFt: af,
+      altPct: Math.min(af / 45000, 1),
+      cardinal: getCardinal(flight.hdg),
+      vrFpm: Math.round(flight.vr * 196.85),
+    };
+  }, [flight.alt, flight.vr, flight.hdg]);
 
-  const altFt = Math.round(flight.alt * 3.281);
-  const altPct = Math.min(altFt / 45000, 1);
-  const cardinal = getCardinal(flight.hdg);
   const lastSeen = flight.lastContact
     ? `${Math.round(Date.now() / 1000 - flight.lastContact)}s ago`
     : "--";
 
-  const vrFpm = Math.round(flight.vr * 196.85);
-
   return (
     <div
       ref={sheetRef}
+      data-flight-detail
       className={[
         // ── Mobile: bottom sheet ──
         "fixed left-0 right-0 bottom-0 z-20 flex flex-col bg-black/80 backdrop-blur-md rounded-t-2xl overflow-visible",
         // Only animate when not dragging
         dragging ? "" : "transition-[max-height] duration-300 ease-in-out",
         // Desktop classes always apply
-        "sm:max-h-none sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
+        "sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
         hidden ? "sm:right-[calc(-20rem-1rem)]" : "sm:right-4",
       ].join(" ")}
       style={{
-        // During drag: compute height from finger position
-        // dragOffset positive = swiped up = sheet should grow
+        // Mobile bottom-sheet height — overridden on desktop by sm:max-h-none!important below
         maxHeight: dragging
           ? `clamp(180px, ${expanded ? "70dvh" : "180px"} + ${dragOffset}px, 70dvh)`
           : expanded ? "70dvh" : "180px",
@@ -168,9 +173,9 @@ export default function FlightDetail({ flight, onClose, animate, hidden, zoomCon
         touchAction: "none",
       }}
     >
-      {/* Zoom/pause controls — sits above the panel on mobile, hidden on desktop */}
+      {/* Zoom/pause controls — above panel on mobile, bottom-left of panel on desktop */}
       {zoomControls && (
-        <div className="absolute -top-12 right-3 flex flex-row gap-1 sm:hidden" style={{ zIndex: 21 }}>
+        <div className={`absolute -top-12 right-3 flex flex-row gap-1 sm:fixed sm:top-auto sm:bottom-4 sm:left-auto sm:flex-col sm:transition-[right] sm:duration-300 ${hidden ? "sm:right-4" : "sm:right-[344px]"}`} style={{ zIndex: 21 }}>
           {zoomControls}
         </div>
       )}
@@ -489,7 +494,7 @@ function AirlineLogo({ icao, callsign, size = "default" }: { icao?: string; call
   if (!code || failed) {
     return (
       <svg className={`${sizeClass} text-yellow-400 shrink-0`} viewBox="0 0 24 24" fill="currentColor">
-        <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+        <path d={AIRPLANE_PATH} />
       </svg>
     );
   }
@@ -547,7 +552,7 @@ function RouteBar({ route, loading }: { route: RouteInfo | null; loading: boolea
             </div>
           ))}
           <svg className="w-4 h-4 text-cyan-400/60" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+            <path d={AIRPLANE_PATH} />
           </svg>
           <div className="w-4 h-[1px] bg-white/15" />
         </div>

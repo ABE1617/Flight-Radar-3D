@@ -231,7 +231,7 @@ export default function Globe() {
           {/* Zoom/pause buttons — inside FlightDetail when selected, standalone otherwise */}
           {!selectedFlight && (
             <div
-              className="fixed right-3 flex flex-row gap-1 sm:right-4"
+              className="fixed right-3 flex flex-row gap-1 sm:right-4 sm:flex-col"
               style={{
                 zIndex: 21,
                 bottom: "calc(16px + env(safe-area-inset-bottom, 0px))",

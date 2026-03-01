@@ -72,71 +72,79 @@ export default function LoadingScreen({ ready, onComplete }: LoadingScreenProps)
         transition: "opacity 0.8s ease-out",
       }}
     >
-      {/* Grid background — concentric circles + angular lines */}
+      {/* Radar logo with spinning sweep */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="relative"
         style={{
-          backgroundImage: `
-            radial-gradient(circle, transparent 18%, rgba(0,255,255,0.15) 18.5%, transparent 19%),
-            radial-gradient(circle, transparent 30%, rgba(0,255,255,0.1) 30.5%, transparent 31%),
-            radial-gradient(circle, transparent 44%, rgba(0,255,255,0.08) 44.5%, transparent 45%),
-            conic-gradient(from 0deg, transparent 0deg, rgba(0,255,255,0.08) 1deg, transparent 2deg,
-              transparent 30deg, rgba(0,255,255,0.06) 31deg, transparent 32deg,
-              transparent 60deg, rgba(0,255,255,0.06) 61deg, transparent 62deg,
-              transparent 90deg, rgba(0,255,255,0.08) 91deg, transparent 92deg,
-              transparent 120deg, rgba(0,255,255,0.06) 121deg, transparent 122deg,
-              transparent 150deg, rgba(0,255,255,0.06) 151deg, transparent 152deg,
-              transparent 180deg, rgba(0,255,255,0.08) 181deg, transparent 182deg,
-              transparent 210deg, rgba(0,255,255,0.06) 211deg, transparent 212deg,
-              transparent 240deg, rgba(0,255,255,0.06) 241deg, transparent 242deg,
-              transparent 270deg, rgba(0,255,255,0.08) 271deg, transparent 272deg,
-              transparent 300deg, rgba(0,255,255,0.06) 301deg, transparent 302deg,
-              transparent 330deg, rgba(0,255,255,0.06) 331deg, transparent 332deg,
-              transparent 360deg)
-          `,
-          backgroundPosition: "center center",
-          backgroundSize: "100% 100%",
-        }}
-      />
-
-      {/* Ring */}
-      <div
-        className="absolute"
-        style={{
-          width: 120,
-          height: 120,
-          left: "50%",
-          top: "50%",
-          borderRadius: "50%",
-          border: "1px solid rgba(0,255,255,0.6)",
-          boxShadow: "0 0 30px rgba(0,255,255,0.15), inset 0 0 30px rgba(0,255,255,0.05)",
+          width: 160,
+          height: 160,
           animation: exiting
-            ? "loadingRingExpand 0.8s ease-out forwards"
-            : "loadingRingPulse 2s ease-in-out infinite",
+            ? "logoExpand 0.8s ease-out forwards"
+            : undefined,
         }}
-      />
+      >
+        <svg viewBox="0 0 256 256" width="160" height="160">
+          <defs>
+            <radialGradient id="ldBg" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#0a1628" />
+              <stop offset="100%" stopColor="#010108" />
+            </radialGradient>
+            <linearGradient id="ldSweep" x1="50%" y1="50%" x2="85%" y2="15%">
+              <stop offset="0%" stopColor="#00ffff" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="#00ffff" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="ldPlane" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#00ffff" />
+              <stop offset="100%" stopColor="#06b6d4" />
+            </linearGradient>
+          </defs>
 
-      {/* Inner ring */}
-      <div
-        className="absolute"
-        style={{
-          width: 80,
-          height: 80,
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          borderRadius: "50%",
-          border: "1px solid rgba(0,255,255,0.2)",
-          opacity: exiting ? 0 : 1,
-          transition: "opacity 0.3s",
-        }}
-      />
+          {/* Background circle */}
+          <circle cx="128" cy="128" r="124" fill="url(#ldBg)" stroke="#00ffff" strokeOpacity="0.3" strokeWidth="3" />
+
+          {/* Radar rings */}
+          <circle cx="128" cy="128" r="96" fill="none" stroke="#00ffff" strokeOpacity="0.08" strokeWidth="2" />
+          <circle cx="128" cy="128" r="64" fill="none" stroke="#00ffff" strokeOpacity="0.12" strokeWidth="2" />
+          <circle cx="128" cy="128" r="32" fill="none" stroke="#00ffff" strokeOpacity="0.15" strokeWidth="2" />
+
+          {/* Crosshair lines */}
+          <line x1="128" y1="32" x2="128" y2="224" stroke="#00ffff" strokeOpacity="0.06" strokeWidth="1.5" />
+          <line x1="32" y1="128" x2="224" y2="128" stroke="#00ffff" strokeOpacity="0.06" strokeWidth="1.5" />
+
+          {/* Spinning radar sweep cone */}
+          <g style={{ transformOrigin: "128px 128px", animation: "radarSpin 2s linear infinite" }}>
+            <path d="M128,128 L200,56 A104,104 0 0,1 224,112 Z" fill="url(#ldSweep)" opacity="0.5" />
+          </g>
+
+          {/* Plane icon */}
+          <g transform="translate(128,122) rotate(-45) scale(3.8)">
+            <path d="M0,-14 L3,-4 L12,4 L12,6 L3,3 L1,12 L4,14 L4,16 L0,14.5 L-4,16 L-4,14 L-1,12 L-3,3 L-12,6 L-12,4 L-3,-4 Z" fill="url(#ldPlane)" />
+          </g>
+
+          {/* Center dot */}
+          <circle cx="128" cy="128" r="4" fill="#00ffff" opacity="0.7" />
+
+          {/* Blip dots — fade in/out */}
+          <circle cx="72" cy="64" r="4" fill="#00ffff" style={{ animation: "blipPulse 2s ease-in-out infinite 0.3s" }} />
+          <circle cx="188" cy="172" r="3.5" fill="#00ffff" style={{ animation: "blipPulse 2s ease-in-out infinite 1.0s" }} />
+          <circle cx="52" cy="164" r="3" fill="#00ffff" style={{ animation: "blipPulse 2s ease-in-out infinite 1.7s" }} />
+        </svg>
+
+        {/* Outer glow ring (pulsing) */}
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            boxShadow: "0 0 40px rgba(0,255,255,0.15), 0 0 80px rgba(0,255,255,0.05)",
+            animation: "logoPulse 2s ease-in-out infinite",
+          }}
+        />
+      </div>
 
       {/* Status text */}
       <div
         className="absolute font-mono text-[11px] tracking-[0.25em] uppercase"
         style={{
-          top: "calc(50% + 80px)",
+          top: "calc(50% + 100px)",
           left: "50%",
           transform: "translateX(-50%)",
           color: "rgba(0,255,255,0.7)",
@@ -153,7 +161,7 @@ export default function LoadingScreen({ ready, onComplete }: LoadingScreenProps)
       <div
         className="absolute font-mono text-[9px] tracking-[0.15em] uppercase text-white/20"
         style={{
-          top: "calc(50% + 100px)",
+          top: "calc(50% + 120px)",
           left: "50%",
           transform: "translateX(-50%)",
           opacity: exiting ? 0 : 1,
@@ -161,7 +169,7 @@ export default function LoadingScreen({ ready, onComplete }: LoadingScreenProps)
           whiteSpace: "nowrap",
         }}
       >
-        GLOBAL FLIGHT TRACKER v2.0
+        FLIGHTORBIT v2.0
       </div>
     </div>
   );

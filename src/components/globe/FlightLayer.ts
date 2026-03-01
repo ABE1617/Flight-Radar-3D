@@ -3,6 +3,7 @@ import { latLngToVector3 } from '@/data/countries';
 import type { FlightData } from '@/types/flights';
 
 const MAX_INSTANCES = 6000;
+const DEG_TO_RAD = Math.PI / 180;
 
 /** Aircraft size class derived from ADS-B category */
 const enum PlaneClass {
@@ -62,6 +63,8 @@ export class FlightLayer {
   private live: LiveFlight[] = [];
   private selectedId: string | null = null;
   private color = new THREE.Color();
+  // Pre-allocated buckets for _rebuildInstances to avoid per-frame allocations
+  private _buckets: number[][] = [[], [], []];
 
   private _pos = new THREE.Vector3();
   private _surfacePos = new THREE.Vector3();
@@ -72,6 +75,7 @@ export class FlightLayer {
   private _right = new THREE.Vector3();
   private _northRef = new THREE.Vector3();
   private _basis = new THREE.Matrix4();
+  private _scaleVec = new THREE.Vector3();
 
   constructor(R: number) {
     this.R = R;
@@ -183,8 +187,8 @@ export class FlightLayer {
     if (this.live.length === 0) return;
 
     for (const f of this.live) {
-      const hdgRad = f.hdg * (Math.PI / 180);
-      const cosLat = Math.cos(f.lat * (Math.PI / 180));
+      const hdgRad = f.hdg * DEG_TO_RAD;
+      const cosLat = Math.cos(f.lat * DEG_TO_RAD);
       const velMs = f.vel * 0.5144;
       const dLat = velMs * Math.cos(hdgRad) * dt / 111320;
       const dLng = cosLat > 0.001
@@ -209,8 +213,9 @@ export class FlightLayer {
   private _rebuildInstances() {
     const total = Math.min(this.live.length, MAX_INSTANCES);
 
-    // Bucket flights by class
-    const buckets: number[][] = [[], [], []];
+    // Bucket flights by class — reuse pre-allocated arrays
+    const buckets = this._buckets;
+    for (let c = 0; c < PLANE_CLASS_COUNT; c++) buckets[c].length = 0;
     for (let i = 0; i < total; i++) {
       buckets[classifyFlight(this.live[i].cat)].push(i);
     }
@@ -304,14 +309,14 @@ export class FlightLayer {
 
     this._east.crossVectors(this._north, this._normal).normalize();
 
-    const hdgRad = hdg * (Math.PI / 180);
+    const hdgRad = hdg * DEG_TO_RAD;
     const cosH = Math.cos(hdgRad);
     const sinH = Math.sin(hdgRad);
     this._forward.copy(this._north).multiplyScalar(cosH).addScaledVector(this._east, sinH);
     this._right.copy(this._east).multiplyScalar(cosH).addScaledVector(this._north, -sinH);
 
     this._basis.makeBasis(this._right, this._forward, this._normal);
-    this._basis.scale(new THREE.Vector3(scale, scale, scale));
+    this._basis.scale(this._scaleVec.set(scale, scale, scale));
     this._basis.setPosition(this._pos);
   }
 
