@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { FlightData, AircraftMeta, RouteInfo } from "@/types/flights";
 
 interface FlightDetailProps {
@@ -8,6 +8,7 @@ interface FlightDetailProps {
   onClose: () => void;
   animate?: boolean;
   hidden?: boolean;
+  zoomControls?: React.ReactNode;
 }
 
 const CATEGORY_LABELS: Record<number, string> = {
@@ -31,17 +32,56 @@ const CATEGORY_LABELS: Record<number, string> = {
   17: "Point obstacle",
 };
 
-export default function FlightDetail({ flight, onClose, animate, hidden }: FlightDetailProps) {
+export default function FlightDetail({ flight, onClose, animate, hidden, zoomControls }: FlightDetailProps) {
   const [meta, setMeta] = useState<AircraftMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0); // positive = dragged down
+  const dragStartY = useRef(0);
+  const dragStartExpanded = useRef(false);
+  const wasDragged = useRef(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Reset to compact when flight changes
   useEffect(() => {
     setExpanded(false);
+    setDragOffset(0);
   }, [flight.id]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    dragStartY.current = e.touches[0].clientY;
+    dragStartExpanded.current = expanded;
+    wasDragged.current = false;
+    setDragging(true);
+  }, [expanded]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!dragging) return;
+    const dy = dragStartY.current - e.touches[0].clientY; // positive = swiped up
+    if (Math.abs(dy) > 5) wasDragged.current = true;
+    setDragOffset(dy);
+  }, [dragging]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!dragging) return;
+    setDragging(false);
+
+    const threshold = 40;
+    if (wasDragged.current) {
+      // Real drag — snap based on direction
+      if (dragStartExpanded.current) {
+        if (dragOffset < -threshold) setExpanded(false);
+      } else {
+        if (dragOffset > threshold) setExpanded(true);
+      }
+    }
+    // If not a real drag (< 5px move), onClick will handle the tap toggle
+
+    setDragOffset(0);
+  }, [dragging, dragOffset]);
 
   useEffect(() => {
     let active = true;
@@ -108,28 +148,45 @@ export default function FlightDetail({ flight, onClose, animate, hidden }: Fligh
 
   return (
     <div
+      ref={sheetRef}
       className={[
         // ── Mobile: bottom sheet ──
-        "fixed left-0 right-0 bottom-0 z-20 flex flex-col bg-black/80 backdrop-blur-md rounded-t-2xl",
-        "transition-[max-height] duration-300 ease-in-out",
-        expanded ? "max-h-[70dvh]" : "max-h-[180px] overflow-hidden",
-        // ── Desktop: right sidebar (unchanged) ──
-        "sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:max-h-none sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
+        "fixed left-0 right-0 bottom-0 z-20 flex flex-col bg-black/80 backdrop-blur-md rounded-t-2xl overflow-visible",
+        // Only animate when not dragging
+        dragging ? "" : "transition-[max-height] duration-300 ease-in-out",
+        // Desktop classes always apply
+        "sm:max-h-none sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
         hidden ? "sm:right-[calc(-20rem-1rem)]" : "sm:right-4",
       ].join(" ")}
       style={{
-        paddingBottom: expanded ? "env(safe-area-inset-bottom, 0px)" : undefined,
-        touchAction: "auto",
+        // During drag: compute height from finger position
+        // dragOffset positive = swiped up = sheet should grow
+        maxHeight: dragging
+          ? `clamp(180px, ${expanded ? "70dvh" : "180px"} + ${dragOffset}px, 70dvh)`
+          : expanded ? "70dvh" : "180px",
+        paddingBottom: expanded || (dragging && dragOffset > 40) ? "env(safe-area-inset-bottom, 0px)" : undefined,
+        touchAction: "none",
       }}
     >
+      {/* Zoom/pause controls — sits above the panel on mobile, hidden on desktop */}
+      {zoomControls && (
+        <div className="absolute -top-12 right-3 flex flex-row gap-1 sm:hidden" style={{ zIndex: 21 }}>
+          {zoomControls}
+        </div>
+      )}
+      {/* Inner clipping container — clips content to max-height without hiding the absolute-positioned buttons above */}
+      <div className={`flex flex-col flex-1 min-h-0 ${expanded ? "" : "overflow-hidden"} sm:overflow-visible sm:flex-1`}>
       {/* ── Mobile drag handle + compact header ── */}
       <div className="sm:hidden shrink-0">
-        {/* Tap entire header area to toggle expand/collapse */}
+        {/* Swipe or tap header to expand/collapse */}
         <div
           role="button"
           tabIndex={0}
-          onClick={() => setExpanded((e) => !e)}
-          className="cursor-pointer"
+          onClick={() => { if (!wasDragged.current) setExpanded((e) => !e); }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="cursor-pointer select-none"
         >
           {/* Drag handle pill */}
           <div className="w-full flex flex-col items-center pt-2.5 pb-1.5">
@@ -368,6 +425,7 @@ export default function FlightDetail({ flight, onClose, animate, hidden }: Fligh
           </div>
         </div>
       </div>
+      </div>{/* close inner clipping container */}
     </div>
   );
 }

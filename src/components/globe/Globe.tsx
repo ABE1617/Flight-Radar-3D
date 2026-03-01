@@ -228,59 +228,28 @@ export default function Globe() {
             </svg>
           </button>
 
-          {/* Zoom controls — always above the flight detail panel */}
-          <div
-            className="fixed z-21 right-3 flex flex-row gap-1 sm:right-4"
-            style={{
-              zIndex: 21,
-              bottom: selectedFlight ? "calc(190px + env(safe-area-inset-bottom, 0px))" : "calc(16px + env(safe-area-inset-bottom, 0px))",
-              transition: "bottom 0.3s ease-in-out",
-            }}
-          >
-            <button
-              onClick={handleZoomIn}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-white/50 hover:text-white/90 hover:bg-black/80 active:scale-95 transition-all"
-              aria-label="Zoom in"
+          {/* Zoom/pause buttons — inside FlightDetail when selected, standalone otherwise */}
+          {!selectedFlight && (
+            <div
+              className="fixed right-3 flex flex-row gap-1 sm:right-4"
+              style={{
+                zIndex: 21,
+                bottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
+              }}
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-            <button
-              onClick={handleZoomOut}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-white/50 hover:text-white/90 hover:bg-black/80 active:scale-95 transition-all"
-              aria-label="Zoom out"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-            <button
-              onClick={handleTogglePause}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg backdrop-blur-sm border border-white/10 active:scale-95 transition-all ${
-                engineRef.current?.paused
-                  ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-                  : "bg-black/60 text-white/50 hover:text-white/90 hover:bg-black/80"
-              }`}
-              aria-label={engineRef.current?.paused ? "Resume rotation" : "Pause rotation"}
-            >
-              {engineRef.current?.paused ? (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="6,4 20,12 6,20" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="5" y="4" width="4" height="16" rx="1" />
-                  <rect x="15" y="4" width="4" height="16" rx="1" />
-                </svg>
-              )}
-            </button>
-          </div>
+              <ZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onTogglePause={handleTogglePause} paused={!!engineRef.current?.paused} />
+            </div>
+          )}
 
           {selectedFlight && (
             <>
-              <FlightDetail flight={selectedFlight} onClose={handleClose} animate hidden={rightHidden} />
+              <FlightDetail
+                flight={selectedFlight}
+                onClose={handleClose}
+                animate
+                hidden={rightHidden}
+                zoomControls={<ZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onTogglePause={handleTogglePause} paused={!!engineRef.current?.paused} />}
+              />
               {/* Right panel toggle (desktop only) */}
               <button
                 onClick={() => setRightHidden((h) => !h)}
@@ -303,6 +272,43 @@ export default function Globe() {
           )}
         </>
       )}
+    </>
+  );
+}
+
+/* ─── Zoom / Pause Buttons ───────────────────────── */
+function ZoomControls({ onZoomIn, onZoomOut, onTogglePause, paused }: {
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onTogglePause: () => void;
+  paused: boolean;
+}) {
+  const btn = "w-9 h-9 flex items-center justify-center rounded-lg backdrop-blur-sm border border-white/10 active:scale-95 transition-all";
+  return (
+    <>
+      <button onClick={onZoomIn} className={`${btn} bg-black/60 text-white/50 hover:text-white/90 hover:bg-black/80`} aria-label="Zoom in">
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <button onClick={onZoomOut} className={`${btn} bg-black/60 text-white/50 hover:text-white/90 hover:bg-black/80`} aria-label="Zoom out">
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <button
+        onClick={onTogglePause}
+        className={`${btn} ${paused ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-black/60 text-white/50 hover:text-white/90 hover:bg-black/80"}`}
+        aria-label={paused ? "Resume rotation" : "Pause rotation"}
+      >
+        {paused ? (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20" /></svg>
+        ) : (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="4" width="4" height="16" rx="1" /><rect x="15" y="4" width="4" height="16" rx="1" />
+          </svg>
+        )}
+      </button>
     </>
   );
 }

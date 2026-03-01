@@ -1135,11 +1135,6 @@ export class GlobeEngine {
       const t = 1 - Math.exp(-speed * dt);
       this.g.quaternion.slerp(this._qTarget, t);
 
-      // Sync Euler state from the quaternion so drag / auto-rotate can
-      // resume seamlessly when the flight is deselected.
-      this._userRotY = this.g.rotation.y;
-      this._userRotX = this.g.rotation.x - 0.12;
-
       // Kill inertia & parallax
       this._dragVelX = 0;
       this._dragVelY = 0;
@@ -1234,9 +1229,27 @@ export class GlobeEngine {
 
   /** Select a flight — always highlights + centers camera on it */
   setSelectedFlight(f: FlightData | null) {
+    const wasTracking = this._selectedFlight !== null;
     this._selectedFlight = f;
     if (!f) {
       this._prevTrackedId = null;
+
+      // Capture current globe orientation so it doesn't jump.
+      // The globe is positioned by quaternion slerp during tracking.
+      // We need to extract Euler angles that reproduce the same visual
+      // orientation when applied as rotation.x = 0.12 + _userRotX,
+      // rotation.y = _userRotY, rotation.z = -0.18.
+      if (wasTracking) {
+        // Read the Euler decomposition from the current quaternion
+        // using the same order Three.js uses internally (XYZ).
+        const euler = new THREE.Euler().setFromQuaternion(this.g.quaternion, 'XYZ');
+        this._userRotY = euler.y;
+        this._userRotX = euler.x - 0.12;
+        // Kill any inertia so the globe stays perfectly still
+        this._dragVelX = 0;
+        this._dragVelY = 0;
+      }
+
       // Restore zoom when deselecting
       if (this._trackingZoom) {
         this._userZoom = this._preTrackZoom;
