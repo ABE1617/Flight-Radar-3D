@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#010108"/>
+    </radialGradient>
+    <linearGradient id="sweep" x1="50%" y1="50%" x2="85%" y2="15%">
+      <stop offset="0%" stop-color="#00ffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#00ffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="plane" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="124" fill="url(#bg)" stroke="#00ffff" stroke-opacity="0.3" stroke-width="3"/>
+
+  <!-- Radar rings -->
+  <circle cx="128" cy="128" r="96" fill="none" stroke="#00ffff" stroke-opacity="0.08" stroke-width="2"/>
+  <circle cx="128" cy="128" r="64" fill="none" stroke="#00ffff" stroke-opacity="0.12" stroke-width="2"/>
+  <circle cx="128" cy="128" r="32" fill="none" stroke="#00ffff" stroke-opacity="0.15" stroke-width="2"/>
+
+  <!-- Crosshair lines -->
+  <line x1="128" y1="32" x2="128" y2="224" stroke="#00ffff" stroke-opacity="0.06" stroke-width="1.5"/>
+  <line x1="32" y1="128" x2="224" y2="128" stroke="#00ffff" stroke-opacity="0.06" stroke-width="1.5"/>
+
+  <!-- Radar sweep cone -->
+  <path d="M128,128 L200,56 A104,104 0 0,1 224,112 Z" fill="url(#sweep)" opacity="0.5"/>
+
+  <!-- Plane icon — large and centered, rotated NW -->
+  <g transform="translate(128,122) rotate(-45) scale(3.8)">
+    <path d="M0,-14 L3,-4 L12,4 L12,6 L3,3 L1,12 L4,14 L4,16 L0,14.5 L-4,16 L-4,14 L-1,12 L-3,3 L-12,6 L-12,4 L-3,-4 Z" fill="url(#plane)"/>
+  </g>
+
+  <!-- Center dot -->
+  <circle cx="128" cy="128" r="4" fill="#00ffff" opacity="0.7"/>
+
+  <!-- Blip dots -->
+  <circle cx="72" cy="64" r="4" fill="#00ffff" opacity="0.5"/>
+  <circle cx="188" cy="172" r="3.5" fill="#00ffff" opacity="0.35"/>
+  <circle cx="52" cy="164" r="3" fill="#00ffff" opacity="0.25"/>
+</svg>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, useReducer } from "react";
 import { GlobeEngine } from "./GlobeEngine";
 import FlightPanel from "@/components/FlightPanel";
 import FlightDetail from "@/components/FlightDetail";
@@ -139,6 +139,21 @@ export default function Globe() {
     setSelectedId(null);
   }, []);
 
+  const handleZoomIn = useCallback(() => {
+    engineRef.current?.stepZoom(-2);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    engineRef.current?.stepZoom(2);
+  }, []);
+
+  // useReducer toggle to force re-render when pause state changes
+  const [, forceRender] = useReducer((x: number) => x + 1, 0);
+  const handleTogglePause = useCallback(() => {
+    engineRef.current?.togglePause();
+    forceRender();
+  }, []);
+
   const handleLoadingComplete = useCallback(() => {
     setLoadingDone(true);
   }, []);
@@ -155,7 +170,7 @@ export default function Globe() {
 
   return (
     <>
-      <div ref={containerRef} className="fixed inset-0 z-0" />
+      <div ref={containerRef} className="fixed inset-0 z-0" style={{ touchAction: "none" }} />
 
       {!loadingDone && (
         <LoadingScreen ready={engineReady} onComplete={handleLoadingComplete} />
@@ -167,8 +182,6 @@ export default function Globe() {
           <MobileTopBar
             menuOpen={mobileMenuOpen}
             onToggleMenu={handleToggleMobileMenu}
-            search={search}
-            onSearchChange={handleSearchChange}
             status={connectionStatus}
             flightCount={rawFlights.length}
           />
@@ -179,6 +192,8 @@ export default function Globe() {
             selectedId={selectedId}
             onSelect={handleSelect}
             onZoom={handleZoom}
+            search={search}
+            onSearchChange={handleSearchChange}
           />
 
           {/* ── Desktop flight panel (hidden on mobile) ── */}
@@ -212,6 +227,56 @@ export default function Globe() {
               }
             </svg>
           </button>
+
+          {/* Zoom controls — always above the flight detail panel */}
+          <div
+            className="fixed z-21 right-3 flex flex-row gap-1 sm:right-4"
+            style={{
+              zIndex: 21,
+              bottom: selectedFlight ? "calc(190px + env(safe-area-inset-bottom, 0px))" : "calc(16px + env(safe-area-inset-bottom, 0px))",
+              transition: "bottom 0.3s ease-in-out",
+            }}
+          >
+            <button
+              onClick={handleZoomIn}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-white/50 hover:text-white/90 hover:bg-black/80 active:scale-95 transition-all"
+              aria-label="Zoom in"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              onClick={handleZoomOut}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-white/50 hover:text-white/90 hover:bg-black/80 active:scale-95 transition-all"
+              aria-label="Zoom out"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              onClick={handleTogglePause}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg backdrop-blur-sm border border-white/10 active:scale-95 transition-all ${
+                engineRef.current?.paused
+                  ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                  : "bg-black/60 text-white/50 hover:text-white/90 hover:bg-black/80"
+              }`}
+              aria-label={engineRef.current?.paused ? "Resume rotation" : "Pause rotation"}
+            >
+              {engineRef.current?.paused ? (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="6,4 20,12 6,20" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="4" width="4" height="16" rx="1" />
+                  <rect x="15" y="4" width="4" height="16" rx="1" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           {selectedFlight && (
             <>

@@ -103,6 +103,15 @@ export class GlobeEngine {
   private _boundContextMenu: (e: Event) => void;
   private _boundWheel: (e: WheelEvent) => void;
   private _boundClick: (e: MouseEvent) => void;
+  private _boundTouchStart: (e: TouchEvent) => void;
+  private _boundTouchMove: (e: TouchEvent) => void;
+  private _boundTouchEnd: (e: TouchEvent) => void;
+  private _touchStartDist = 0; // pinch-to-zoom baseline
+  private _touchStartZoom = 16;
+  private _touchStartX = 0;
+  private _touchStartY = 0;
+  private _touchMoved = false;
+  private _paused = false;
   private _disposed = false;
 
   // Click-to-select
@@ -130,16 +139,23 @@ export class GlobeEngine {
   private _userRotX = 0; // accumulated user rotation around X
 
   // Zoom state
+  private _defaultZoom = typeof window !== 'undefined' && window.innerWidth < 640 ? 22 : 16;
   private _camZ = 16;
   private _targetCamZ = 16;
-  private _userZoom = 16; // user-controlled zoom via scroll wheel
-  private _preTrackZoom = 16; // saved zoom before flight tracking
+  private _userZoom = 16;
+  private _preTrackZoom = 16;
   private _trackingZoom = false;
 
   constructor(container: HTMLElement) {
     this.el = container;
     this.ld = new THREE.Vector3(1, 0.6, 0.8).normalize();
     this.clk = new THREE.Clock();
+
+    // Mobile starts more zoomed out so the full globe is visible
+    this._camZ = this._defaultZoom;
+    this._targetCamZ = this._defaultZoom;
+    this._userZoom = this._defaultZoom;
+    this._preTrackZoom = this._defaultZoom;
     // Match Three.js v0.149 behavior — newer versions enable color
     // management by default which applies sRGB gamma, making everything
     // brighter and washing out the additive-blending glow effects.
@@ -219,10 +235,95 @@ export class GlobeEngine {
     };
     this._boundWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomSpeed = 0.002;
-      this._userZoom += e.deltaY * zoomSpeed;
+      // Normalize delta across input types:
+      // deltaMode 0 = pixels (trackpad), 1 = lines (scroll wheel), 2 = pages
+      let delta = e.deltaY;
+      if (e.deltaMode === 1) delta *= 16;    // lines → pixels
+      else if (e.deltaMode === 2) delta *= 100; // pages → pixels
+
+      // Trackpads send small deltas (1-10px), scroll wheels send large (50-150px).
+      // Use a speed that works for both — fast enough for trackpad, not crazy for wheel.
+      const zoomSpeed = 0.008;
+      this._userZoom += delta * zoomSpeed;
       // Clamp: close enough to see detail, far enough to see whole globe
       this._userZoom = Math.max(6.5, Math.min(30, this._userZoom));
+    };
+
+    // ── Touch handlers (mobile globe navigation) ──
+    this._boundTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        // Single finger = potential drag or tap
+        this._dragging = false;
+        this._touchMoved = false;
+        this._touchStartX = e.touches[0].clientX;
+        this._touchStartY = e.touches[0].clientY;
+        this._dragPrevX = e.touches[0].clientX;
+        this._dragPrevY = e.touches[0].clientY;
+        this._dragVelX = 0;
+        this._dragVelY = 0;
+      } else if (e.touches.length === 2) {
+        // Two fingers = pinch to zoom
+        this._dragging = false;
+        this._touchMoved = true; // not a tap
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        this._touchStartDist = Math.sqrt(dx * dx + dy * dy);
+        this._touchStartZoom = this._userZoom;
+      }
+    };
+    this._boundTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - this._touchStartX;
+        const dy = t.clientY - this._touchStartY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // Only start dragging after moving > 8px (tap threshold)
+        if (!this._touchMoved && dist > 8) {
+          this._touchMoved = true;
+          this._dragging = true;
+        }
+
+        if (this._dragging) {
+          e.preventDefault(); // prevent page scroll only when actually dragging
+          const moveDx = t.clientX - this._dragPrevX;
+          const moveDy = t.clientY - this._dragPrevY;
+          const sensitivity = 0.002;
+          this._dragVelX = moveDx * sensitivity;
+          this._dragVelY = moveDy * sensitivity;
+          this._userRotY += this._dragVelX;
+          this._userRotX += this._dragVelY;
+          this._userRotX = Math.max(-1.5, Math.min(1.5, this._userRotX));
+          this._dragPrevX = t.clientX;
+          this._dragPrevY = t.clientY;
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (this._touchStartDist > 0) {
+          // Additive: each pixel of pinch spread = direct zoom change
+          // Pinch out (spread fingers) → dist grows → negative delta → zoom in (lower value)
+          // Pinch in (squeeze fingers) → dist shrinks → positive delta → zoom out (higher value)
+          const delta = this._touchStartDist - dist;
+          this._userZoom = Math.max(6.5, Math.min(30, this._touchStartZoom + delta * 0.06));
+        }
+      }
+    };
+    this._boundTouchEnd = (e: TouchEvent) => {
+      // If finger lifted without dragging, treat as a tap → fire click logic
+      if (!this._touchMoved && e.changedTouches.length > 0) {
+        const t = e.changedTouches[0];
+        this._boundClick(new MouseEvent('click', {
+          clientX: t.clientX,
+          clientY: t.clientY,
+          button: 0,
+        }));
+      }
+      this._dragging = false;
+      this._touchStartDist = 0;
+      this._touchMoved = false;
     };
 
     this._init();
@@ -963,6 +1064,9 @@ export class GlobeEngine {
     this.ren.domElement.addEventListener('contextmenu', this._boundContextMenu);
     this.ren.domElement.addEventListener('wheel', this._boundWheel, { passive: false });
     this.ren.domElement.addEventListener('click', this._boundClick);
+    this.ren.domElement.addEventListener('touchstart', this._boundTouchStart, { passive: true });
+    this.ren.domElement.addEventListener('touchmove', this._boundTouchMove, { passive: false });
+    this.ren.domElement.addEventListener('touchend', this._boundTouchEnd, { passive: true });
   }
 
   private _resize() {
@@ -1045,8 +1149,8 @@ export class GlobeEngine {
       this._targetCamZ = this._userZoom;
       useQuaternion = true;
     } else if (!this._dragging) {
-      // Auto-rotate
-      this._userRotY += (Math.PI * 2 / 100) * dt;
+      // Auto-rotate (skip when paused)
+      if (!this._paused) this._userRotY += (Math.PI * 2 / 100) * dt;
       // Decay inertia from drag release
       this._userRotY += this._dragVelX;
       this._userRotX += this._dragVelY;
@@ -1151,6 +1255,14 @@ export class GlobeEngine {
     this._userZoom = Math.min(this._userZoom, 9);
   }
 
+  /** Step zoom in (negative) or out (positive) by a fixed amount */
+  stepZoom(delta: number) {
+    this._userZoom = Math.max(6.5, Math.min(30, this._userZoom + delta));
+  }
+
+  togglePause() { this._paused = !this._paused; }
+  get paused() { return this._paused; }
+
   dispose() {
     this._disposed = true;
     this._flightLayer?.dispose();
@@ -1165,6 +1277,9 @@ export class GlobeEngine {
     this.ren.domElement.removeEventListener('contextmenu', this._boundContextMenu);
     this.ren.domElement.removeEventListener('wheel', this._boundWheel);
     this.ren.domElement.removeEventListener('click', this._boundClick);
+    this.ren.domElement.removeEventListener('touchstart', this._boundTouchStart);
+    this.ren.domElement.removeEventListener('touchmove', this._boundTouchMove);
+    this.ren.domElement.removeEventListener('touchend', this._boundTouchEnd);
     this.ren.dispose();
     this.scene.traverse((o: any) => {
       if (o.geometry) o.geometry.dispose();

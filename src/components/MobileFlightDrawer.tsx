@@ -10,6 +10,8 @@ interface MobileFlightDrawerProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onZoom: (id: string) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
 }
 
 export default function MobileFlightDrawer({
@@ -19,6 +21,8 @@ export default function MobileFlightDrawer({
   selectedId,
   onSelect,
   onZoom,
+  search,
+  onSearchChange,
 }: MobileFlightDrawerProps) {
   const capped = flights.slice(0, 200);
 
@@ -55,6 +59,42 @@ export default function MobileFlightDrawer({
           </span>
           <div className="text-[10px] text-white/25 mt-0.5">
             {capped.length} shown
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="px-3 py-2 border-b border-white/10">
+          <div className="relative">
+            <svg
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search callsign..."
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-md pl-8 pr-8 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-cyan-500/50 focus:shadow-[0_0_8px_rgba(0,255,255,0.12)] transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 

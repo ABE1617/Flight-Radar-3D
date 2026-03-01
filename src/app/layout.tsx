@@ -9,8 +9,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Global Connect",
-  description: "Premium cinematic 3D globe visualization",
+  title: "FlightOrbit — Live 3D Flight Tracker",
+  description: "Real-time 3D flight radar with cinematic globe visualization. Built by ABE.",
+  authors: [{ name: "ABE" }],
+  keywords: ["flight tracker", "3D globe", "live radar", "aviation"],
 };
 
 export default function RootLayout({

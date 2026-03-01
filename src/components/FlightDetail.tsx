@@ -112,13 +112,14 @@ export default function FlightDetail({ flight, onClose, animate, hidden }: Fligh
         // ── Mobile: bottom sheet ──
         "fixed left-0 right-0 bottom-0 z-20 flex flex-col bg-black/80 backdrop-blur-md rounded-t-2xl",
         "transition-[max-height] duration-300 ease-in-out",
-        expanded ? "max-h-[70dvh] overflow-hidden" : "max-h-[180px] overflow-hidden",
+        expanded ? "max-h-[70dvh]" : "max-h-[180px] overflow-hidden",
         // ── Desktop: right sidebar (unchanged) ──
         "sm:z-10 sm:inset-auto sm:top-4 sm:bottom-4 sm:left-auto sm:w-80 sm:max-h-none sm:bg-black/60 sm:border sm:border-white/10 sm:rounded-xl sm:transition-[right] sm:duration-300 sm:rounded-t-xl",
         hidden ? "sm:right-[calc(-20rem-1rem)]" : "sm:right-4",
       ].join(" ")}
       style={{
         paddingBottom: expanded ? "env(safe-area-inset-bottom, 0px)" : undefined,
+        touchAction: "auto",
       }}
     >
       {/* ── Mobile drag handle + compact header ── */}
@@ -135,8 +136,9 @@ export default function FlightDetail({ flight, onClose, animate, hidden }: Fligh
             <div className="w-10 h-1 rounded-full bg-white/30" />
           </div>
 
-          {/* Compact header: callsign, phase, metrics */}
-          <div className="px-4 pb-3 flex items-start gap-3">
+          {/* Compact header: logo, callsign, phase, metrics */}
+          <div className="px-4 pb-3 flex items-center gap-3">
+            <AirlineLogo icao={meta?.operatorIcao} callsign={flight.cs} size="medium" />
             <div className="flex-1 min-w-0">
               {/* Callsign + phase */}
               <div className="flex items-center gap-2">
@@ -414,7 +416,7 @@ function Row({
 
 /* ─── Airline Logo ───────────────────────────────── */
 
-function AirlineLogo({ icao, callsign }: { icao?: string; callsign?: string }) {
+function AirlineLogo({ icao, callsign, size = "default" }: { icao?: string; callsign?: string; size?: "default" | "medium" | "small" }) {
   const [failed, setFailed] = useState(false);
 
   const code = icao || (callsign ? callsign.replace(/[0-9]/g, "").slice(0, 3) : "");
@@ -423,9 +425,12 @@ function AirlineLogo({ icao, callsign }: { icao?: string; callsign?: string }) {
     setFailed(false);
   }, [code]);
 
+  const sizeClass = size === "small" ? "w-6 h-6" : size === "medium" ? "w-8 h-8" : "w-8 h-8 mb-1";
+  const imgH = size === "small" ? "h-6" : size === "medium" ? "h-8" : "h-10 mb-1";
+
   if (!code || failed) {
     return (
-      <svg className="w-8 h-8 text-yellow-400 mb-1" viewBox="0 0 24 24" fill="currentColor">
+      <svg className={`${sizeClass} text-yellow-400 shrink-0`} viewBox="0 0 24 24" fill="currentColor">
         <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
       </svg>
     );
@@ -436,7 +441,7 @@ function AirlineLogo({ icao, callsign }: { icao?: string; callsign?: string }) {
     <img
       src={`https://www.flightaware.com/images/airline_logos/90p/${code}.png`}
       alt={code}
-      className="h-10 mb-1 object-contain drop-shadow-lg"
+      className={`${imgH} object-contain drop-shadow-lg shrink-0`}
       onError={() => setFailed(true)}
     />
   );
